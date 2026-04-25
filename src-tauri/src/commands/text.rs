@@ -18,6 +18,53 @@ use enigo::{
 // Global flag to prevent concurrent text insertions
 static IS_INSERTING: AtomicBool = AtomicBool::new(false);
 
+/// Ensure prose ending in sentence punctuation has exactly one trailing space.
+///
+/// This is applied at the insertion boundary only, so stored transcription
+/// history remains clean. Rules:
+/// - `Hello world.` → `Hello world. `
+/// - `Hello world. ` → `Hello world. ` (normalize to one)
+/// - `Hello world` → `Hello world` (no sentence end, no space)
+/// - `https://example.com.` → `https://example.com.` (URL-like, skip)
+/// - `foo@bar.com.` → `foo@bar.com.` (email-like, skip)
+/// - `x = y.` → `x = y.` (code-like, skip)
+fn ensure_trailing_sentence_space(text: &str) -> String {
+    let trimmed = text.trim_end();
+    if trimmed.is_empty() {
+        return text.to_string();
+    }
+
+    let last_char = trimmed.chars().last().unwrap();
+
+    // Only add space after sentence-ending punctuation
+    if !matches!(last_char, '.' | '!' | '?') {
+        return text.to_string();
+    }
+
+    // Detect contexts where a trailing space would be harmful
+    // Strip the trailing period to check what precedes it for TLD patterns
+    let before_period = trimmed.strip_suffix('.').unwrap_or(trimmed);
+    let looks_like_url = trimmed.contains("://")
+        || before_period.ends_with(".com")
+        || before_period.ends_with(".org")
+        || before_period.ends_with(".net")
+        || before_period.ends_with(".io")
+        || before_period.ends_with(".dev")
+        || before_period.ends_with(".app");
+    // Email-like: contains @ with no spaces (even if followed by period)
+    let looks_like_email = before_period.contains('@') && !before_period.contains(' ');
+    let looks_like_code = trimmed.contains("=") || trimmed.contains("->") || trimmed.contains("::") || trimmed.contains("{") || trimmed.contains("}") || trimmed.contains(";");
+    let has_newlines = trimmed.contains('\n');
+
+    if looks_like_url || looks_like_email || looks_like_code || has_newlines {
+        return text.to_string();
+    }
+
+    // Preserve exactly one trailing space
+    format!("{} ", trimmed)
+}
+
+
 #[tauri::command]
 pub async fn insert_text(app: tauri::AppHandle, text: String) -> Result<(), String> {
     // Check if already inserting text
@@ -54,10 +101,13 @@ pub async fn insert_text(app: tauri::AppHandle, text: String) -> Result<(), Stri
     };
 
     tokio::task::spawn_blocking(move || {
+        // Apply trailing sentence space only at the insertion boundary,
+        // so stored transcription history remains clean.
+        let insertable_text = ensure_trailing_sentence_space(&text);
         // Always use clipboard method for reliability and to prevent duplicate insertion
         // This function handles both copying to clipboard and pasting at cursor
         insert_via_clipboard(
-            text,
+            insertable_text,
             has_accessibility_permission,
             Some(app),
             keep_transcription_in_clipboard,
@@ -464,4 +514,132 @@ fn paste_linux() -> Result<(), SimulateError> {
     send_key_event(&EventType::KeyRelease(RdevKey::ControlLeft))?;
     log::debug!("Linux paste simulation completed");
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sentence_end_gets_trailing_space() {
+        assert_eq!(
+            ensure_trailing_sentence_space("Hello world."),
+            "Hello world. "
+        );
+    }
+
+    #[test]
+    fn exclamation_gets_trailing_space() {
+        assert_eq!(
+            ensure_trailing_sentence_space("That's great!"),
+            "That's great! "
+        );
+    }
+
+    #[test]
+    fn question_mark_gets_trailing_space() {
+        assert_eq!(
+            ensure_trailing_sentence_space("How are you?"),
+            "How are you? "
+        );
+    }
+
+    #[test]
+    fn existing_trailing_spaces_normalize_to_one() {
+        assert_eq!(
+            ensure_trailing_sentence_space("Hello world.   "),
+            "Hello world. "
+        );
+    }
+
+    #[test]
+    fn no_sentence_end_no_space() {
+        assert_eq!(
+            ensure_trailing_sentence_space("Hello world"),
+            "Hello world"
+        );
+    }
+
+    #[test]
+    fn comma_no_space() {
+        assert_eq!(
+            ensure_trailing_sentence_space("Hello world,"),
+            "Hello world,"
+        );
+    }
+
+    #[test]
+    fn url_no_space() {
+        assert_eq!(
+            ensure_trailing_sentence_space("Visit https://example.com."),
+            "Visit https://example.com."
+        );
+    }
+
+    #[test]
+    fn email_no_space() {
+        assert_eq!(
+            ensure_trailing_sentence_space("user@example.com."),
+            "user@example.com."
+        );
+    }
+
+    #[test]
+    fn code_like_no_space() {
+        assert_eq!(
+            ensure_trailing_sentence_space("x = y."),
+            "x = y."
+        );
+    }
+
+    #[test]
+    fn multiline_no_space() {
+        assert_eq!(
+            ensure_trailing_sentence_space("Hello.\nWorld."),
+            "Hello.\nWorld."
+        );
+    }
+
+    #[test]
+    fn empty_string_unchanged() {
+        assert_eq!(
+            ensure_trailing_sentence_space(""),
+            ""
+        );
+    }
+
+    #[test]
+    fn only_whitespace_unchanged() {
+        assert_eq!(
+            ensure_trailing_sentence_space("   "),
+            "   "
+        );
+    }
+
+    #[test]
+    fn tld_like_ending_no_space() {
+        // .com ending should not get a space (ambiguous with domain)
+        assert_eq!(
+            ensure_trailing_sentence_space("example.com."),
+            "example.com."
+        );
+    }
+
+    #[test]
+    fn normal_prose_with_period() {
+        // Normal dictation: sentence with a period
+        assert_eq!(
+            ensure_trailing_sentence_space("The quick brown fox jumps over the lazy dog."),
+            "The quick brown fox jumps over the lazy dog. "
+        );
+    }
+
+    #[test]
+    fn semicolon_code_like_no_space() {
+        assert_eq!(
+            ensure_trailing_sentence_space("let x = 5;"),
+            "let x = 5;"
+        );
+    }
 }
