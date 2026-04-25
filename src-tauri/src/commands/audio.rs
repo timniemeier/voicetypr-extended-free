@@ -604,9 +604,18 @@ async fn validate_recording_requirements(app: &AppHandle) -> Result<(), String> 
     let status = if let Some(cached_status) = license_status {
         cached_status
     } else {
-        // Cache miss or stale - perform fresh license check
-        match check_license_status_internal(app).await {
-            Ok(fresh_status) => {
+        // Cache miss or stale - perform license check with a bounded timeout.
+        // This prevents the recording start path from blocking indefinitely on
+        // slow/offline network license validation, which causes PTT key-up to be
+        // missed and recording to start after the user released the key.
+        let check_result = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            check_license_status_internal(app),
+        )
+        .await;
+
+        match check_result {
+            Ok(Ok(fresh_status)) => {
                 // Update cache
                 let app_state = app.state::<AppState>();
                 let mut cache = app_state.license_cache.write().await;
@@ -616,9 +625,17 @@ async fn validate_recording_requirements(app: &AppHandle) -> Result<(), String> 
                 log::debug!("License status cached for 6 hours");
                 fresh_status
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 log::error!("Failed to check license status: {}", e);
                 // Allow recording if license check fails (graceful degradation)
+                return Ok(());
+            }
+            Err(_) => {
+                // Timeout - license check took too long.
+                // Allow recording to proceed; enforcement happens on next successful check.
+                log::warn!(
+                    "License check timed out after 3s; allowing recording to proceed (enforcement deferred to next successful validation)"
+                );
                 return Ok(());
             }
         }
@@ -701,6 +718,18 @@ pub async fn start_recording(
                 ],
             );
             return Err(e);
+        }
+    }
+
+    // PTT guard: if recording mode is PushToTalk and the key was already released
+    // while validation was running, abort now. This prevents recording from starting
+    // after the user has already released the PTT key (e.g., during slow license checks).
+    {
+        let app_state = app.state::<AppState>();
+        let mode = app_state.recording_mode.lock().map(|g| *g).unwrap_or(RecordingMode::Toggle);
+        if mode == RecordingMode::PushToTalk && !app_state.ptt_key_held.load(std::sync::atomic::Ordering::SeqCst) {
+            log::info!("PTT: Key was released during validation; aborting recording start");
+            return Err("PTT key released before recording could start".to_string());
         }
     }
 
@@ -1022,10 +1051,41 @@ pub async fn start_recording(
     // Clear cancellation flag for new recording
     app_state.clear_cancellation();
 
+    // Second PTT guard: check again right before committing to Recording state.
+    // Audio capture has already started; if PTT key was released between the first
+    // guard (before Starting) and now (e.g., during audio device init), stop immediately.
+    {
+        let mode = app_state.recording_mode.lock().map(|g| *g).unwrap_or(RecordingMode::Toggle);
+        if mode == RecordingMode::PushToTalk && !app_state.ptt_key_held.load(std::sync::atomic::Ordering::SeqCst) {
+            log::info!("PTT: Key was released during audio init; stopping recorder immediately");
+            // Stop the audio recorder synchronously before transitioning state
+            let recorder_state_handle = app.state::<RecorderState>();
+            if let Ok(mut recorder) = recorder_state_handle.inner().0.lock() {
+                if recorder.is_recording() {
+                    let _ = recorder.stop_recording();
+                }
+            }
+            MEDIA_CONTROLLER.resume_if_we_paused();
+
+            // Clean up the audio file
+            if let Ok(mut path_guard) = app_state.current_recording_path.lock() {
+                if let Some(path) = path_guard.take() {
+                    let _ = std::fs::remove_file(&path);
+                }
+            }
+
+            update_recording_state(&app, RecordingState::Idle, None);
+            return Err("PTT key released during audio initialization".to_string());
+        }
+    }
+
     // Update state to recording
     update_recording_state(&app, RecordingState::Recording, None);
 
-    // If a toggle-stop was requested while starting, honor it immediately after entering Recording
+    // If a stop was requested while starting (toggle or PTT), honor it immediately
+    // after entering Recording state. For PTT, key-up in Starting state sets this flag.
+    // The second PTT guard above handles key-up during audio init; this handles the
+    // narrow window between Starting transition and this point.
     if app_state
         .pending_stop_after_start
         .swap(false, std::sync::atomic::Ordering::SeqCst)

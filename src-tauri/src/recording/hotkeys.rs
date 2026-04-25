@@ -201,19 +201,31 @@ fn handle_ptt_mode(
                 return;
             }
 
-            if matches!(
-                current_state,
-                RecordingState::Recording | RecordingState::Starting
-            ) {
-                log::info!("PTT: Stopping recording");
-                let app_handle = app.clone();
-                tauri::async_runtime::spawn(async move {
-                    let recorder_state = app_handle.state::<RecorderState>();
-                    match stop_recording(app_handle.clone(), recorder_state).await {
-                        Ok(_) => log::info!("PTT: Recording stopped successfully"),
-                        Err(e) => log::error!("PTT: Error stopping recording: {}", e),
-                    }
-                });
+            match current_state {
+                RecordingState::Recording => {
+                    log::info!("PTT: Stopping recording");
+                    let app_handle = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let recorder_state = app_handle.state::<RecorderState>();
+                        match stop_recording(app_handle.clone(), recorder_state).await {
+                            Ok(_) => log::info!("PTT: Recording stopped successfully"),
+                            Err(e) => log::error!("PTT: Error stopping recording: {}", e),
+                        }
+                    });
+                }
+                RecordingState::Starting => {
+                    // Key released while recording is still starting up.
+                    // Set the pending flag so start_recording() can honor the stop
+                    // as soon as it reaches the Recording state. This prevents
+                    // recording from continuing after the user released PTT.
+                    log::info!("PTT: Key released while Starting; setting pending_stop_after_start");
+                    app_state
+                        .pending_stop_after_start
+                        .store(true, Ordering::SeqCst);
+                }
+                _ => {
+                    log::debug!("PTT: Key released in state {:?}; no action", current_state);
+                }
             }
         }
     }
