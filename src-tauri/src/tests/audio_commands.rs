@@ -448,6 +448,23 @@ mod tests {
     }
 
     #[test]
+    fn test_ptt_abort_clears_pending_stop_after_start() {
+        let app_state = AppState::new();
+        app_state
+            .pending_stop_after_start
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+
+        crate::commands::audio::clear_pending_stop_after_start(&app_state);
+
+        assert!(
+            !app_state
+                .pending_stop_after_start
+                .load(std::sync::atomic::Ordering::SeqCst),
+            "PTT abort cleanup must not leave a stale pending stop for the next recording"
+        );
+    }
+
+    #[test]
     fn test_duplicate_ptt_key_release_ignored() {
         let app_state = AppState::new();
 

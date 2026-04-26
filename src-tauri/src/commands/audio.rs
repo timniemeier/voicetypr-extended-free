@@ -710,6 +710,12 @@ async fn validate_recording_requirements(app: &AppHandle) -> Result<(), String> 
     Ok(())
 }
 
+pub(crate) fn clear_pending_stop_after_start(app_state: &AppState) {
+    app_state
+        .pending_stop_after_start
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+}
+
 #[tauri::command]
 pub async fn start_recording(
     app: AppHandle,
@@ -874,9 +880,7 @@ pub async fn start_recording(
 
     // Store path for later use and reset any leftover pending-toggle flag
     let app_state = app.state::<AppState>();
-    app_state
-        .pending_stop_after_start
-        .store(false, std::sync::atomic::Ordering::SeqCst);
+    clear_pending_stop_after_start(&app_state);
 
     // Save current recording path
     match app_state.current_recording_path.lock() {
@@ -1135,6 +1139,7 @@ pub async fn start_recording(
                     }
                 });
 
+            clear_pending_stop_after_start(&app_state);
             MEDIA_CONTROLLER.resume_if_we_paused();
             stop_result?;
 

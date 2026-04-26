@@ -665,6 +665,21 @@ mod tests {
     }
 
     #[test]
+    fn repeated_sentence_insertions_keep_boundaries() {
+        let combined = format!(
+            "{}{}{}",
+            ensure_trailing_sentence_space("This is the testing bro one two three."),
+            ensure_trailing_sentence_space("This is a testing blow one to three."),
+            ensure_trailing_sentence_space("This is a testing row on to three."),
+        );
+
+        assert_eq!(
+            combined,
+            "This is the testing bro one two three. This is a testing blow one to three. This is a testing row on to three. "
+        );
+    }
+
+    #[test]
     fn code_assignment_sentence_like_no_space() {
         assert_eq!(
             ensure_trailing_sentence_space("result = ok."),
