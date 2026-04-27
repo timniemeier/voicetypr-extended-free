@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AppContainer } from './AppContainer';
 
@@ -56,7 +56,9 @@ vi.mock('@/services/updateService', () => ({
   updateService: {
     initialize: vi.fn().mockResolvedValue(true),
     dispose: vi.fn(),
-    getJustUpdatedVersion: () => mockGetJustUpdatedVersion()
+    getJustUpdatedVersion: () => mockGetJustUpdatedVersion(),
+    checkForUpdatesManually: vi.fn().mockResolvedValue(undefined),
+    requestNotificationPermission: vi.fn()
   }
 }));
 
@@ -67,9 +69,8 @@ vi.mock('@/components/onboarding/OnboardingDesktop', () => ({
 }));
 
 vi.mock('@/components/ui/sidebar', () => ({
-  Sidebar: ({ children, onSectionChange }: any) => (
-    <div data-testid="sidebar">
-      <button onClick={() => onSectionChange('models')}>Models</button>
+  Sidebar: ({ children, collapsible }: any) => (
+    <div data-testid="sidebar" data-collapsible={collapsible}>
       {children}
     </div>
   ),
@@ -94,10 +95,13 @@ vi.mock('./tabs/TabContainer', () => ({
     </div>
   )
 }));
-// Mock event coordinator
+
+// Captured mock for registerEvent so we can verify calls and cleanup
+const mockRegisterEvent = vi.fn();
+const mockUnlisteners: Array<ReturnType<typeof vi.fn>> = [];
 vi.mock('@/hooks/useEventCoordinator', () => ({
   useEventCoordinator: () => ({
-    registerEvent: vi.fn()
+    registerEvent: mockRegisterEvent
   })
 }));
 
@@ -110,6 +114,12 @@ describe('AppContainer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSettings.onboarding_completed = true;
+    mockUnlisteners.length = 0;
+    mockRegisterEvent.mockImplementation(() => {
+      const unlisten = vi.fn();
+      mockUnlisteners.push(unlisten);
+      return Promise.resolve(unlisten);
+    });
   });
 
   it('shows main app when onboarding is completed', () => {
@@ -125,16 +135,86 @@ describe('AppContainer', () => {
     expect(screen.queryByTestId('sidebar')).not.toBeInTheDocument();
   });
 
-  it('allows navigation between sections', () => {
-    // This test verifies the AppContainer renders and is interactive
-    // The actual navigation is tested through the Sidebar mock
+  it('renders sidebar as non-collapsible', () => {
     render(<AppContainer />);
-    
-    // Verify the app structure is in place
+    const sidebar = screen.getByTestId('sidebar');
+    expect(sidebar).toHaveAttribute('data-collapsible', 'none');
+  });
+
+  it('keeps sidebar visible after Cmd+B keyboard shortcut', () => {
+    render(<AppContainer />);
+    // Simulate Cmd+B being pressed
+    fireEvent.keyDown(window, { key: 'b', metaKey: true });
+    // Sidebar must still be in the document
+    expect(screen.getByTestId('sidebar')).toBeInTheDocument();
+  });
+
+  it('navigate-to-settings event navigates to general tab', () => {
+    render(<AppContainer />);
+
+    // Find the registerEvent call for navigate-to-settings
+    const settingsCall = mockRegisterEvent.mock.calls.find(
+      (call: any[]) => call[0] === 'navigate-to-settings'
+    );
+    expect(settingsCall).toBeDefined();
+
+    // Invoke the handler
+    const handler = settingsCall![1];
+    act(() => handler());
+
+    // TabContainer should show 'general' tab
+    expect(screen.getByTestId('tab-container')).toHaveTextContent('Current Tab: general');
+  });
+
+  it('navigate-to-settings does not navigate to overview', () => {
+    render(<AppContainer />);
+
+    const settingsCall = mockRegisterEvent.mock.calls.find(
+      (call: any[]) => call[0] === 'navigate-to-settings'
+    );
+    expect(settingsCall).toBeDefined();
+
+    const handler = settingsCall![1];
+    act(() => handler());
+
+    expect(screen.getByTestId('tab-container')).not.toHaveTextContent('Current Tab: overview');
+  });
+
+  it('registerEvent is called once per event type on mount', () => {
+    render(<AppContainer />);
+
+    // Collect all event names registered
+    const eventNames = mockRegisterEvent.mock.calls.map((call: any[]) => call[0]);
+    const counts: Record<string, number> = {};
+    for (const name of eventNames) {
+      counts[name] = (counts[name] || 0) + 1;
+    }
+
+    // Each event should be registered exactly once
+    for (const [name, count] of Object.entries(counts)) {
+      expect(count, `Event '${name}' should be registered once`).toBe(1);
+    }
+  });
+
+  it('cleans up registered Tauri event listeners on unmount', async () => {
+    const { unmount } = render(<AppContainer />);
+
+    await waitFor(() => {
+      expect(mockUnlisteners).toHaveLength(mockRegisterEvent.mock.calls.length);
+    });
+
+    unmount();
+
+    for (const unlisten of mockUnlisteners) {
+      expect(unlisten).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('allows navigation between sections', () => {
+    render(<AppContainer />);
     expect(screen.getByTestId('sidebar')).toBeInTheDocument();
     expect(screen.getByTestId('tab-container')).toBeInTheDocument();
   });
-
   describe('post-update modal', () => {
     it('shows update dialog when app was just updated', async () => {
       mockGetJustUpdatedVersion.mockReturnValue('1.13.0');
@@ -150,7 +230,6 @@ describe('AppContainer', () => {
       mockGetJustUpdatedVersion.mockReturnValue(null);
       render(<AppContainer />);
 
-      // Wait for initial render to settle
       await waitFor(() => {
         expect(screen.getByTestId('sidebar')).toBeInTheDocument();
       });
@@ -165,7 +244,6 @@ describe('AppContainer', () => {
         expect(screen.getByText('VoiceTypr Updated')).toBeInTheDocument();
       });
 
-      // Click the dismiss button inside the dialog
       const dismissBtn = screen.getByRole('button', { name: /^dismiss$/i });
       fireEvent.click(dismissBtn);
 

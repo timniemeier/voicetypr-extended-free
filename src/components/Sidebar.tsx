@@ -50,7 +50,7 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
   const daysLeft = status?.trial_days_left || -1;
 
   return (
-    <SidebarPrimitive >
+    <SidebarPrimitive collapsible="none">
       <SidebarContent className="px-2">
         <SidebarGroup className="flex-1">
           <SidebarMenu>
