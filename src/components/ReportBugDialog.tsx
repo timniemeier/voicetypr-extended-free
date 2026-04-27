@@ -228,6 +228,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
               size="sm"
               onClick={handleSubmitEmail}
               disabled={isSubmitting}
+              aria-busy={isSubmitting}
               className="gap-2"
             >
               <Mail className="h-4 w-4" />

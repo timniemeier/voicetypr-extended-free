@@ -110,7 +110,7 @@ pub struct LatestLogAttachment {
     pub redacted_content: String,
     /// Original total file size in bytes before truncation.
     pub original_byte_count: u64,
-    /// Number of bytes actually included after tail-bounding.
+    /// Number of bytes returned in `redacted_content`.
     pub included_byte_count: u64,
     /// True when the file was larger than MAX_TAIL_BYTES and was truncated.
     pub truncated: bool,
@@ -167,7 +167,11 @@ pub fn read_log_tail(
 
     if file_len <= max_bytes {
         file.read_to_end(&mut bytes)?;
-        return Ok((String::from_utf8_lossy(&bytes).into_owned(), file_len, false));
+        return Ok((
+            String::from_utf8_lossy(&bytes).into_owned(),
+            file_len,
+            false,
+        ));
     }
 
     use std::io::{Seek, SeekFrom};
@@ -187,58 +191,81 @@ pub fn read_log_tail(
 /// Redact common sensitive patterns from log content.
 /// Preserves context for debugging while removing secrets.
 pub fn redact_log_content(content: &str) -> String {
+    use std::sync::OnceLock;
+
+    static WRAPPED_SECRET_RE: OnceLock<regex::Regex> = OnceLock::new();
+    static UNQUOTED_SECRET_RE: OnceLock<regex::Regex> = OnceLock::new();
+    static BEARER_RE: OnceLock<regex::Regex> = OnceLock::new();
+    static SK_KEY_RE: OnceLock<regex::Regex> = OnceLock::new();
+    static LICENSE_RE: OnceLock<regex::Regex> = OnceLock::new();
+    static EMAIL_RE: OnceLock<regex::Regex> = OnceLock::new();
+    static HOME_RE: OnceLock<regex::Regex> = OnceLock::new();
+    static ABSOLUTE_PATH_RE: OnceLock<regex::Regex> = OnceLock::new();
+
     let mut result = content.to_string();
 
     // Key/value secret patterns. Keep the field name, redact the value.
-    let wrapped_secret_re = regex::Regex::new(
-        r#"(?i)([\"']?\b(?:api[_-]?key|apikey|secret[_-]?key|access[_-]?token|license[_-]?key)\b[\"']?\s*[:=]\s*(?:Some\(|String\()?['\"])[^'\"]+(['\"]\)?)"#,
-    )
-    .unwrap();
+    let wrapped_secret_re = WRAPPED_SECRET_RE.get_or_init(|| {
+        regex::Regex::new(
+            r#"(?i)([\"']?\b(?:api[_-]?key|apikey|secret[_-]?key|access[_-]?token|license[_-]?key)\b[\"']?\s*[:=]\s*(?:Some\(|String\()?['\"])[^'\"]+(['\"]\)?)"#,
+        )
+        .unwrap()
+    });
     result = wrapped_secret_re
         .replace_all(&result, "$1[REDACTED]$2")
         .to_string();
 
-    let unquoted_secret_re = regex::Regex::new(
-        r#"(?i)(\b(?:api[_-]?key|apikey|secret[_-]?key|access[_-]?token|license[_-]?key)\b\s*[:=]\s*)[^\s,;}]+"#,
-    )
-    .unwrap();
+    let unquoted_secret_re = UNQUOTED_SECRET_RE.get_or_init(|| {
+        regex::Regex::new(
+            r#"(?i)(\b(?:api[_-]?key|apikey|secret[_-]?key|access[_-]?token|license[_-]?key)\b\s*[:=]\s*)[^\s,;}]+"#,
+        )
+        .unwrap()
+    });
     result = unquoted_secret_re
         .replace_all(&result, "$1[REDACTED]")
         .to_string();
 
-    // Bearer token headers: Authorization: Bearer <token>
-    let bearer_re = regex::Regex::new(r"(?i)bearer\s+[^\s,;]+\b").unwrap();
+    // Bearer token headers: Authorization: Bearer <token>.
+    let bearer_re =
+        BEARER_RE.get_or_init(|| regex::Regex::new(r"(?i)bearer\s+[^\s,;]+\b").unwrap());
     result = bearer_re
         .replace_all(&result, "bearer [REDACTED]")
         .to_string();
 
-    // OpenAI / Anthropic key values: sk-<chars>, sk-ant-<chars>
-    let sk_key_re = regex::Regex::new(r"\b(sk-(?:ant(?:hropic)?-)?)[a-zA-Z0-9_-]{20,}\b").unwrap();
+    // OpenAI / Anthropic key values: sk-<chars>, sk-ant-<chars>.
+    let sk_key_re = SK_KEY_RE.get_or_init(|| {
+        regex::Regex::new(r"\b(sk-(?:ant(?:hropic)?-)?)[a-zA-Z0-9_-]{20,}\b").unwrap()
+    });
     result = sk_key_re.replace_all(&result, "$1[REDACTED]").to_string();
 
-    // License-key-looking patterns: groups of alphanum separated by dashes
-    let license_re = regex::Regex::new(r"\b[A-Z0-9]{4,8}(?:-[A-Z0-9]{4,8}){3,}\b").unwrap();
+    // License-key-looking patterns: groups of alphanum separated by dashes.
+    let license_re = LICENSE_RE
+        .get_or_init(|| regex::Regex::new(r"\b[A-Z0-9]{4,8}(?:-[A-Z0-9]{4,8}){3,}\b").unwrap());
     result = license_re
         .replace_all(&result, "[LICENSE_REDACTED]")
         .to_string();
 
-    // Email addresses
-    let email_re =
-        regex::Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b").unwrap();
+    // Email addresses.
+    let email_re = EMAIL_RE.get_or_init(|| {
+        regex::Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b").unwrap()
+    });
     result = email_re
         .replace_all(&result, "[EMAIL_REDACTED]")
         .to_string();
 
-    // Home directory paths: /Users/<name>/ on macOS, /home/<name>/ on Linux, C:\Users\<name>\ on Windows
-    let home_re =
-        regex::Regex::new(r"(?:/Users/[^/\s]+|/home/[^/\s]+|C:\\Users\\[^\\\s]+)").unwrap();
+    // Home directory paths: /Users/<name>/ on macOS, /home/<name>/ on Linux, C:\Users\<name>\ on Windows.
+    let home_re = HOME_RE.get_or_init(|| {
+        regex::Regex::new(r"(?:/Users/[^/\s]+|/home/[^/\s]+|C:\\Users\\[^\\\s]+)").unwrap()
+    });
     result = home_re.replace_all(&result, "[HOME_DIR]").to_string();
 
     // Other absolute local paths commonly emitted by diagnostics/logging.
-    let absolute_path_re = regex::Regex::new(
-        r#"(^|[\s\"'(=])(/(?:Volumes|tmp|private|var|opt|Applications)/[^\s\"',)]+|[A-Za-z]:\\[^\s\"',)]+)"#,
-    )
-    .unwrap();
+    let absolute_path_re = ABSOLUTE_PATH_RE.get_or_init(|| {
+        regex::Regex::new(
+            r#"(^|[\s\"'(=])(/(?:Volumes|tmp|private|var|opt|Applications)/[^\s\"',)]+|[A-Za-z]:\\[^\s\"',)]+)"#,
+        )
+        .unwrap()
+    });
     result = absolute_path_re
         .replace_all(&result, "$1[PATH_REDACTED]")
         .to_string();
@@ -291,8 +318,8 @@ pub async fn get_latest_log_for_bug_report(
         }
     };
 
-    let included_byte_count = raw.len() as u64;
     let redacted = redact_log_content(&raw);
+    let included_byte_count = redacted.len() as u64;
 
     Ok(LatestLogAttachment {
         file_name,

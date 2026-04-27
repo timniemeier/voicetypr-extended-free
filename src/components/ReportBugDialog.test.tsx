@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { ReportBugDialog } from './ReportBugDialog';
 import { gatherManualReportData, buildReportBody } from '@/utils/crashReport';
 import { open } from '@tauri-apps/plugin-shell';
@@ -28,6 +29,8 @@ vi.mock('@/utils/crashReport', () => ({
   buildReportBody: vi.fn(),
 }));
 
+let writeTextMock: MockInstance<(data: string) => Promise<void>>;
+
 describe('ReportBugDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -46,6 +49,13 @@ describe('ReportBugDialog', () => {
       logStatusNote: '',
     });
     vi.mocked(buildReportBody).mockReturnValue('REPORT BODY with The app broke');
+    if (!navigator.clipboard) {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: async () => undefined },
+      });
+    }
+    writeTextMock = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
   });
 
   it('requires a message before opening an email draft', async () => {
@@ -84,6 +94,27 @@ describe('ReportBugDialog', () => {
     expect(String(vi.mocked(open).mock.calls[0][0])).toContain(encodeURIComponent('REPORT BODY with The app broke'));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('copies the generated report body and keeps the dialog open', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    render(<ReportBugDialog isOpen onClose={onClose} />);
+
+    await user.type(screen.getByLabelText(/message/i), 'Copy this report');
+    expect(screen.getByLabelText(/message/i)).toHaveValue('Copy this report');
+    await user.click(screen.getByRole('button', { name: /copy report/i }));
+    await waitFor(() => {
+      expect(gatherManualReportData).toHaveBeenCalled();
+    });
+    expect(buildReportBody).toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith('REPORT BODY with The app broke');
+    });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
 
 
   it('does not open an email draft when the log-omitted body is still too long', async () => {

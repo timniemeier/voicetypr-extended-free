@@ -31,6 +31,7 @@ mod logging_performance_tests;
 #[cfg(test)]
 mod log_commands_tests;
 
+#[cfg(test)]
 mod integration_tests {
     use crate::whisper::manager::{ModelSize, WhisperManager};
     use tempfile::TempDir;
