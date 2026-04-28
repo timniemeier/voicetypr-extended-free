@@ -68,6 +68,7 @@ describe('ReportBugDialog', () => {
     expect(screen.getByText(/please describe the issue/i)).toBeInTheDocument();
     expect(gatherManualReportData).not.toHaveBeenCalled();
     expect(open).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(/message/i)).toHaveAttribute('aria-required', 'true');
   });
 
   it('opens an email draft with the generated report body', async () => {
@@ -128,7 +129,7 @@ describe('ReportBugDialog', () => {
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith(
-        'This report is too long for an email draft. Please use Copy Report instead.'
+        'This report is too long for an email draft. Please shorten your message or use Copy Report.'
       );
     });
     expect(open).not.toHaveBeenCalled();

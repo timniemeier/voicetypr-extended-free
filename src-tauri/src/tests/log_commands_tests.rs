@@ -222,6 +222,15 @@ mod tests {
     }
 
     #[test]
+    fn test_redact_non_ascii_home_directory_paths() {
+        let input = "Config loaded from /home/josé/.config/voicetypr/settings.json";
+        let redacted = redact_log_content(input);
+        assert!(!redacted.contains("/home/josé"));
+        assert!(redacted.contains("[HOME_DIR]"));
+        assert!(redacted.contains("/.config/voicetypr/settings.json"));
+    }
+
+    #[test]
     fn test_redact_license_pattern_keeps_unlabeled_build_ids() {
         let input = "Build 2022-04-15-RELEASE completed before license ABCD-1234-EFGH-5678-IJKL";
         let redacted = redact_log_content(input);

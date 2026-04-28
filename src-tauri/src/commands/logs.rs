@@ -132,7 +132,8 @@ pub fn find_newest_log(log_dir: &std::path::Path) -> Option<std::path::PathBuf> 
         let Ok(file_type) = entry.file_type() else {
             continue;
         };
-        if !file_type.is_file() {
+        // Explicitly reject symlinks before reading logs so the report flow cannot escape app_log_dir.
+        if !file_type.is_file() || file_type.is_symlink() {
             continue;
         }
 

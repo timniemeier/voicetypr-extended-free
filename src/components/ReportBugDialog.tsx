@@ -107,7 +107,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
     }
 
     if (encodedBody.length > 8_000) {
-      toast.error('This report is too long for an email draft. Please use Copy Report instead.');
+      toast.error('This report is too long for an email draft. Please shorten your message or use Copy Report.');
       return;
     }
 
@@ -190,6 +190,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
                 if (messageError) setMessageError('');
               }}
               rows={5}
+              aria-required="true"
               aria-invalid={Boolean(messageError)}
               aria-describedby={messageError ? 'report-message-error' : undefined}
               className={messageError ? 'border-destructive' : ''}
