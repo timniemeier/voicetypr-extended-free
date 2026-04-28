@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Bug, Copy, Check, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -31,18 +31,46 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [messageError, setMessageError] = useState('');
+  const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [fallbackReportData, setFallbackReportData] = useState<ManualReportData | null>(null);
   const { settings } = useSettings();
   const actionIdRef = useRef(0);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) {
+        clearTimeout(copiedTimerRef.current);
+      }
+    };
+  }, []);
+
+  const clearCopyTimer = () => {
+    if (copiedTimerRef.current) {
+      clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = null;
+    }
+  };
+
+  const resetSubmitFallback = () => {
+    setSubmitError('');
+    setFallbackReportData(null);
+    setCopied(false);
+    clearCopyTimer();
+  };
 
   const resetForm = () => {
     setName('');
     setEmail('');
     setMessage('');
     setMessageError('');
+    setSubmitError('');
     setIsSubmitting(false);
     setCopied(false);
+    setFallbackReportData(null);
+    clearCopyTimer();
   };
 
   const handleClose = () => {
@@ -65,6 +93,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
 
     const actionId = actionIdRef.current + 1;
     actionIdRef.current = actionId;
+    resetSubmitFallback();
     setIsSubmitting(true);
 
     try {
@@ -107,7 +136,9 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
         return;
       }
 
-      toast.error(result.message || 'Failed to submit report. Please use Copy Report instead.');
+      setSubmitError(result.message || 'Failed to submit report. You can copy the report and send it manually.');
+      setFallbackReportData(data);
+      toast.error(result.message || 'Failed to submit report. You can copy the report instead.');
     } finally {
       if (actionId === actionIdRef.current) {
         setIsSubmitting(false);
@@ -116,7 +147,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
   };
 
   const handleCopyReport = async () => {
-    const data = await buildAndGather();
+    const data = fallbackReportData ?? await buildAndGather();
     if (!data) return;
 
     const body = buildReportBody(data);
@@ -125,7 +156,11 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
       await navigator.clipboard.writeText(body);
       setCopied(true);
       toast.success('Report copied to clipboard');
-      setTimeout(() => setCopied(false), 2000);
+      clearCopyTimer();
+      copiedTimerRef.current = setTimeout(() => {
+        setCopied(false);
+        copiedTimerRef.current = null;
+      }, 2000);
     } catch (err) {
       console.error('Failed to copy report:', err);
       toast.error('Failed to copy report');
@@ -154,7 +189,10 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
               id="report-name"
               placeholder="Your name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (submitError) resetSubmitFallback();
+              }}
             />
           </div>
 
@@ -165,7 +203,10 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
               type="email"
               placeholder="your@email.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (submitError) resetSubmitFallback();
+              }}
             />
           </div>
 
@@ -180,6 +221,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
               onChange={(e) => {
                 setMessage(e.target.value);
                 if (messageError) setMessageError('');
+                if (submitError) resetSubmitFallback();
               }}
               rows={5}
               aria-required="true"
@@ -201,19 +243,32 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
               log excerpt.
             </p>
           </div>
+          {submitError && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3" role="alert">
+              <p className="text-xs text-destructive">
+                {submitError}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                If this keeps happening, copy the prepared report and send it manually.
+              </p>
+            </div>
+          )}
+
         </div>
 
         <DialogFooter className="flex-col sm:flex-row gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopyReport}
-            disabled={isSubmitting}
-            className="gap-2"
-          >
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? 'Copied' : 'Copy Report'}
-          </Button>
+          {fallbackReportData && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyReport}
+              disabled={isSubmitting}
+              className="gap-2"
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? 'Copied' : 'Copy Report'}
+            </Button>
+          )}
 
           <div className="flex gap-2 sm:ml-auto">
             <Button variant="ghost" size="sm" onClick={handleClose}>
@@ -227,7 +282,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
               className="gap-2"
             >
               <Send className="h-4 w-4" />
-              {isSubmitting ? 'Gathering...' : 'Submit'}
+              {isSubmitting ? 'Submitting...' : 'Submit'}
             </Button>
           </div>
         </DialogFooter>

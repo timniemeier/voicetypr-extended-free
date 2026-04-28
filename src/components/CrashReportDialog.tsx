@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { AlertTriangle, X, Copy, Check, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -37,7 +37,20 @@ export function CrashReportDialog({
   const [crashData, setCrashData] = useState<CrashReportData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [copied, setCopied] = useState(false);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearCopyTimer = () => {
+    if (copiedTimerRef.current) {
+      clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => clearCopyTimer();
+  }, []);
 
   useEffect(() => {
     if (isOpen && error) {
@@ -51,6 +64,9 @@ export function CrashReportDialog({
   const handleSubmitReport = async () => {
     if (!crashData) return;
 
+    setSubmitError('');
+    setCopied(false);
+    clearCopyTimer();
     setIsSubmitting(true);
     try {
       const result = await submitCrashReport(crashData);
@@ -60,6 +76,7 @@ export function CrashReportDialog({
         return;
       }
 
+      setSubmitError(result.message || 'Failed to submit crash report. You can copy the details and send them manually.');
       toast.error(result.message || 'Failed to submit crash report. Please copy the details instead.');
     } finally {
       setIsSubmitting(false);
@@ -81,7 +98,11 @@ Timestamp: ${crashData.timestamp}`;
       await navigator.clipboard.writeText(details);
       setCopied(true);
       toast.success('Details copied to clipboard');
-      setTimeout(() => setCopied(false), 2000);
+      clearCopyTimer();
+      copiedTimerRef.current = setTimeout(() => {
+        setCopied(false);
+        copiedTimerRef.current = null;
+      }, 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
       toast.error('Failed to copy details');
@@ -158,7 +179,17 @@ Timestamp: ${crashData.timestamp}`;
                 </div>
               </div>
             </div>
+
+            {submitError && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3" role="alert">
+                <p className="text-xs text-destructive">{submitError}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  If this keeps happening, copy the crash details and send them manually.
+                </p>
+              </div>
+            )}
           </div>
+
         ) : (
           <div className="py-8 text-center text-muted-foreground">
             Failed to gather crash details
@@ -166,16 +197,18 @@ Timestamp: ${crashData.timestamp}`;
         )}
 
         <DialogFooter className="flex-col sm:flex-row gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCopyDetails}
-            disabled={!crashData || isSubmitting}
-            className="gap-2"
-          >
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? 'Copied' : 'Copy Details'}
-          </Button>
+          {submitError && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyDetails}
+              disabled={!crashData || isSubmitting}
+              className="gap-2"
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? 'Copied' : 'Copy Details'}
+            </Button>
+          )}
 
           <div className="flex gap-2 sm:ml-auto">
             {onRetry && (

@@ -69,6 +69,12 @@ describe('ReportBugDialog', () => {
     expect(screen.getByLabelText(/message/i)).toHaveAttribute('aria-required', 'true');
   });
 
+  it('does not show copy fallback before a submit failure', () => {
+    render(<ReportBugDialog isOpen onClose={vi.fn()} />);
+
+    expect(screen.queryByRole('button', { name: /copy report/i })).not.toBeInTheDocument();
+  });
+
   it('submits a report directly to support', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
@@ -96,23 +102,28 @@ describe('ReportBugDialog', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('copies the generated report body and keeps the dialog open', async () => {
+  it('copies the generated report body after submit failure and keeps the dialog open', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
+    vi.mocked(submitManualReport).mockResolvedValueOnce({
+      success: false,
+      message: 'Too many reports. Please try again later.',
+    });
 
     render(<ReportBugDialog isOpen onClose={onClose} />);
 
     await user.type(screen.getByLabelText(/message/i), 'Copy this report');
-    expect(screen.getByLabelText(/message/i)).toHaveValue('Copy this report');
+    expect(screen.queryByRole('button', { name: /copy report/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /submit/i }));
+    expect(await screen.findByRole('button', { name: /copy report/i })).toBeEnabled();
+
     await user.click(screen.getByRole('button', { name: /copy report/i }));
-    await waitFor(() => {
-      expect(gatherManualReportData).toHaveBeenCalled();
-    });
     expect(buildReportBody).toHaveBeenCalled();
 
     await waitFor(() => {
       expect(writeTextMock).toHaveBeenCalledWith('REPORT BODY with The app broke');
     });
+    expect(gatherManualReportData).toHaveBeenCalledTimes(1);
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -131,9 +142,9 @@ describe('ReportBugDialog', () => {
     await user.type(screen.getByLabelText(/message/i), 'A very long issue report');
     await user.click(screen.getByRole('button', { name: /submit/i }));
 
-    await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith('Too many reports. Please try again later.');
-    });
+    expect(toast.error).toHaveBeenCalledWith('Too many reports. Please try again later.');
+    expect(await screen.findByRole('button', { name: /copy report/i })).toBeEnabled();
+    expect(screen.getByText(/copy the prepared report/i)).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
   });
 
