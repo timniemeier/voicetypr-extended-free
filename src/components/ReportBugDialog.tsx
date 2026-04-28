@@ -149,9 +149,9 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
             Report a Bug
           </DialogTitle>
           <DialogDescription>
-            Describe the issue you are experiencing. We will include your system
-            information and the latest app log excerpt to help us diagnose the problem.
-            The report will open in your email client for you to review and send.
+            Tell us what happened. VoiceTypr will include your system info and the
+            latest app log excerpt, then open an email addressed to VoiceTypr Support
+            so you can send it directly to us.
           </DialogDescription>
         </DialogHeader>
 
@@ -204,10 +204,9 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
 
           <div className="rounded-md bg-muted/50 border border-border/40 p-3">
             <p className="text-xs text-muted-foreground">
-              <strong>What is included:</strong> Your system info (app version, OS,
-              architecture, model), the latest app log excerpt (automatically redacted
-              for common sensitive patterns like API keys, emails, and local paths),
-              and the message you provide.
+              <strong>What is included:</strong> Your message, optional contact info,
+              system info (app version, OS, architecture, model), and the latest app
+              log excerpt. The email is addressed to VoiceTypr Support.
             </p>
           </div>
         </div>
@@ -236,7 +235,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
               className="gap-2"
             >
               <Mail className="h-4 w-4" />
-              {isSubmitting ? 'Gathering...' : 'Open in Email'}
+              {isSubmitting ? 'Gathering...' : 'Email Support'}
             </Button>
           </div>
         </DialogFooter>

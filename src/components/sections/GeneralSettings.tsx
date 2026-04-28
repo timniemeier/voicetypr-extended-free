@@ -79,9 +79,9 @@ export function GeneralSettings() {
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full min-h-0 flex flex-col">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-border/40">
+      <div className="shrink-0 px-6 py-4 border-b border-border/40">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold">Settings</h1>
@@ -92,7 +92,7 @@ export function GeneralSettings() {
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="p-6 space-y-4">
           {/* Recording Section */}
           <div className="rounded-lg border border-border/50 bg-card">

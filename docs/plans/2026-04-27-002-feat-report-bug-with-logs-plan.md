@@ -1,7 +1,7 @@
 # Plan: Report Bug dialog with latest log context
 
 ## Overview
-Add a bottom-left Report Bug action that opens an in-app dialog. The dialog collects an optional name, optional email, and required message, then builds a support report containing clear system information and the latest redacted app log excerpt. Because this repo currently has no private bug-report API endpoint and the existing GitHub issue path is public, submission will use a user-controlled email draft plus a copy-report fallback rather than silently posting logs to a public destination.
+Add a bottom-left Report Bug action that opens an in-app dialog. The dialog collects an optional name, optional email, and required message, then builds a support report containing clear system information and the latest app log excerpt. Because this repo currently has no private bug-report API endpoint and the existing GitHub issue path is public, this PR uses an email addressed to VoiceTypr Support plus a copy-report fallback; a direct-to-maintainer submit flow should be a follow-up web/API PR.
 
 ---
 
@@ -10,7 +10,7 @@ Add a bottom-left Report Bug action that opens an in-app dialog. The dialog coll
 - Include necessary system info and latest app log context by default, with clear copy explaining what is included.
 - Sanitize and size-bound the latest log before exposing it to the frontend.
 - Preserve the existing crash-report GitHub flow unless a small shared utility extraction is needed.
-- Do not add a public GitHub issue flow for manual reports, because optional email and logs may contain private data.
+- Do not add a public GitHub issue flow for manual reports, because reports should come privately to VoiceTypr support.
 - Do not add a server endpoint in this PR; no private endpoint exists in the desktop repo or sibling web API routes.
 
 ---
@@ -27,7 +27,7 @@ Add a bottom-left Report Bug action that opens an in-app dialog. The dialog coll
 ### Research Findings
 - Existing manual support is email/manual-log only; existing crash reporting opens public GitHub issues.
 - No private `bug-report`, `support`, or `feedback` API route exists in `../voicetypr-web/app/api/**/route.ts`.
-- Logs can include local paths, device names, model/provider details, license/cache diagnostics, and error text. Uploading them raises the privacy bar even if local logging remains appropriate for diagnostics.
+- Logs are useful diagnostics and are included by default; the report copy should be direct about that instead of making the log attachment sound exceptional or scary.
 
 ### Institutional Learnings
 - `memory://root/memory_summary.md` notes the desktop/web split; current repo inspection confirmed no web bug-report endpoint currently exists.
@@ -36,8 +36,8 @@ Add a bottom-left Report Bug action that opens an in-app dialog. The dialog coll
 
 ## Key Technical Decisions
 - **Manual Report Bug is a dialog action, not a tab.** It belongs in the bottom-left group and should not change `activeSection`.
-- **Email draft is the submission path for this PR.** It avoids public GitHub exposure and avoids inventing an unavailable backend. The dialog will label this clearly so the user understands their mail client sends the report.
-- **Backend returns a redacted latest-log excerpt, not an arbitrary file read.** The command should select the newest `voicetypr-*.log`, redact common secrets/paths, bound bytes/lines, and return metadata so the UI can explain what is included.
+- **Email to support is the submission path for this PR.** It avoids public GitHub exposure and avoids inventing an unavailable backend. The dialog labels this as emailing VoiceTypr Support so the user understands where the report goes.
+- **Backend returns a bounded latest-log excerpt, not an arbitrary file read.** The command should select the newest `voicetypr-*.log`, bound bytes/lines, redact defensive common secrets/paths, and return metadata so the UI can explain what is included.
 - **Frontend report builder centralizes system info.** Reuse the crash-report style data gathering without requiring an `Error` object.
 
 ---
@@ -113,7 +113,7 @@ Add a bottom-left Report Bug action that opens an in-app dialog. The dialog coll
 
 **Goal:** Add the bottom-left action and modal UX.
 
-**Requirements:** name optional, email optional, message required; clear copy that latest log and system info are included; submit via email draft; copy fallback.
+**Requirements:** name optional, email optional, message required; clear copy that latest log and system info are included; submit via email addressed to support; copy fallback.
 
 **Dependencies:** U2 utility.
 
@@ -125,7 +125,7 @@ Add a bottom-left Report Bug action that opens an in-app dialog. The dialog coll
 **Approach:**
 - Add a `Report Bug` bottom action with `Bug` icon that opens a local dialog.
 - Dialog validates required message, gathers report data on submit/copy, opens an email compose URL to `support@voicetypr.com`, and offers Copy Report.
-- Include a concise notice: “We’ll include your system info and the latest app log excerpt so support can debug this. The log may include file paths, device/model names, and error details.”
+- Include concise copy: “VoiceTypr will include your system info and the latest app log excerpt, then open an email addressed to VoiceTypr Support so you can send it directly to us.”
 - Avoid marking a nav section active.
 
 **Patterns to follow:**
@@ -156,13 +156,19 @@ Add a bottom-left Report Bug action that opens an in-app dialog. The dialog coll
 ## Risks & Mitigations
 | Risk | Mitigation |
 |------|------------|
-| Logs expose private data when sent | Redact common sensitive patterns, tail/truncate, and clearly tell the user what is included before opening their email client. |
+| Report delivery depends on user's mail client | Keep Copy Report fallback in this PR; follow up with a private web API endpoint for direct submission. |
 | Email URL body may be too long | Bound log excerpt and provide Copy Report fallback. |
 | Public GitHub issue leaks contact/log data | Do not use GitHub issue URL for manual bug reports. |
 | Backend command can become arbitrary file read | Only read newest matching file from Tauri `app_log_dir`; no frontend-supplied path. |
 
 ---
 
+## Direct-to-Maintainer Follow-up Plan
+- Add a `voicetypr-web` server-owned endpoint, for example `app/api/v1/bug-reports/route.ts`, rather than putting any provider secret in the desktop app.
+- Validate a bounded payload: message, optional name/email, app version, OS/architecture/model, device hash or device ID, latest log excerpt, and timestamp.
+- Add abuse controls on the web side using the existing Redis pattern: rate-limit by IP and device identifier, reject oversized bodies before email delivery, and log minimal failure metadata.
+- Deliver privately with a server-side email provider secret, e.g. `BUG_REPORT_TO_EMAIL` plus Resend/Postmark/SMTP credentials stored only in web deployment env.
+- Desktop follow-up: replace the email button with `Submit Report`, POST to the endpoint, show truthful success/failure, and keep Copy Report/email fallback for endpoint outages.
+
 ## Documentation / Operational Notes
-- A future follow-up can replace the email draft with a private `voicetypr-web` bug-report endpoint once storage/rate-limiting/spam handling is designed.
-- This PR should mention the privacy copy and the bounded latest-log behavior in the PR description.
+- This PR should mention that reports include the latest log excerpt and are addressed to VoiceTypr Support.

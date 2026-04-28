@@ -63,7 +63,7 @@ describe('ReportBugDialog', () => {
 
     render(<ReportBugDialog isOpen onClose={vi.fn()} />);
 
-    await user.click(screen.getByRole('button', { name: /open in email/i }));
+    await user.click(screen.getByRole('button', { name: /email support/i }));
 
     expect(screen.getByText(/please describe the issue/i)).toBeInTheDocument();
     expect(gatherManualReportData).not.toHaveBeenCalled();
@@ -71,7 +71,7 @@ describe('ReportBugDialog', () => {
     expect(screen.getByLabelText(/message/i)).toHaveAttribute('aria-required', 'true');
   });
 
-  it('opens an email draft with the generated report body', async () => {
+  it('opens an email addressed to support with the generated report body', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
 
@@ -80,7 +80,7 @@ describe('ReportBugDialog', () => {
     await user.type(screen.getByLabelText(/name/i), 'Moin');
     await user.type(screen.getByLabelText(/email/i), 'moin@example.com');
     await user.type(screen.getByLabelText(/message/i), 'The app broke');
-    await user.click(screen.getByRole('button', { name: /open in email/i }));
+    await user.click(screen.getByRole('button', { name: /email support/i }));
 
     await waitFor(() => {
       expect(open).toHaveBeenCalledTimes(1);
@@ -125,7 +125,7 @@ describe('ReportBugDialog', () => {
     render(<ReportBugDialog isOpen onClose={vi.fn()} />);
 
     await user.type(screen.getByLabelText(/message/i), 'A very long issue report');
-    await user.click(screen.getByRole('button', { name: /open in email/i }));
+    await user.click(screen.getByRole('button', { name: /email support/i }));
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith(
@@ -156,7 +156,7 @@ describe('ReportBugDialog', () => {
     render(<ReportBugDialog isOpen onClose={vi.fn()} />);
 
     await user.type(screen.getByLabelText(/message/i), 'No log case');
-    await user.click(screen.getByRole('button', { name: /open in email/i }));
+    await user.click(screen.getByRole('button', { name: /email support/i }));
 
     await waitFor(() => {
       expect(open).toHaveBeenCalledTimes(1);
