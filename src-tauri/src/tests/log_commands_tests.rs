@@ -16,9 +16,9 @@ mod tests {
         let path_c = dir.path().join("voicetypr-2026-04-27.log");
 
         std::fs::write(&path_a, "old").unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::thread::sleep(std::time::Duration::from_millis(1100));
         std::fs::write(&path_b, "mid").unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::thread::sleep(std::time::Duration::from_millis(1100));
         std::fs::write(&path_c, "new").unwrap();
 
         let newest = find_newest_log(dir.path());
@@ -282,6 +282,9 @@ mod tests {
         assert!(json.contains("[REDACTED] log content"));
         assert!(json.contains("1024"));
         assert!(json.contains("512"));
+        assert!(json.contains("\"fileName\":\"voicetypr-2026-04-27.log\""));
+        assert!(json.contains("\"redactedContent\":\"[REDACTED] log content\""));
+        assert!(json.contains("\"includedByteCount\":512"));
         assert!(json.contains("\"truncated\":true"));
     }
 
@@ -297,7 +300,7 @@ mod tests {
         };
 
         let json = serde_json::to_string(&attachment).unwrap();
-        assert!(json.contains("\"file_name\":null"));
+        assert!(json.contains("\"fileName\":null"));
         assert!(json.contains("No log file found."));
         assert!(json.contains("\"truncated\":false"));
     }

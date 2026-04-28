@@ -4,6 +4,7 @@ import {
   buildManualReportPayload,
   buildReportBody,
   submitManualReport,
+  submitCrashReport,
   type CrashReportData,
   type ManualReportData,
 } from './crashReport';
@@ -155,6 +156,35 @@ describe('report submission payloads', () => {
         body: JSON.stringify(buildManualReportPayload(baseReport)),
       })
     );
+  });
+
+  it('submits crash reports to the support endpoint', async () => {
+    global.fetch = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ success: true, message: 'Crash report submitted' }),
+      { status: 200 }
+    ));
+
+    await expect(submitCrashReport(baseCrashReport)).resolves.toEqual({
+      success: true,
+      message: 'Crash report submitted',
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      'https://voicetypr.com/api/v1/bug-reports',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(buildCrashReportPayload(baseCrashReport)),
+      })
+    );
+  });
+
+  it('returns a failure result when the network request throws', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    global.fetch = vi.fn().mockRejectedValue(new Error('offline'));
+
+    await expect(submitManualReport(baseReport)).resolves.toEqual({
+      success: false,
+      message: 'Could not connect to VoiceTypr Support. Please use Copy Report instead.',
+    });
   });
 
   it('returns a failure result when submit fails', async () => {

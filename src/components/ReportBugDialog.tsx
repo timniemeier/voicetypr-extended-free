@@ -88,7 +88,9 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
     return true;
   };
 
-  const buildAndGather = async (): Promise<ManualReportData | null> => {
+  const buildAndGather = async (
+    { keepSubmitting = false }: { keepSubmitting?: boolean } = {}
+  ): Promise<ManualReportData | null> => {
     if (!validate()) return null;
 
     const actionId = actionIdRef.current + 1;
@@ -112,18 +114,23 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
       }
       return null;
     } finally {
-      if (actionId === actionIdRef.current) {
+      if (actionId === actionIdRef.current && !keepSubmitting) {
         setIsSubmitting(false);
       }
     }
   };
 
   const handleSubmitReport = async () => {
-    const data = await buildAndGather();
-    if (!data) return;
+    const expectedActionId = actionIdRef.current + 1;
+    const data = await buildAndGather({ keepSubmitting: true });
+    if (!data) {
+      if (actionIdRef.current === expectedActionId) {
+        setIsSubmitting(false);
+      }
+      return;
+    }
 
     const actionId = actionIdRef.current;
-    setIsSubmitting(true);
 
     try {
       const result = await submitManualReport(data);
@@ -147,8 +154,8 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
   };
 
   const handleCopyReport = async () => {
-    const data = fallbackReportData ?? await buildAndGather();
-    if (!data) return;
+    if (!fallbackReportData) return;
+    const data = fallbackReportData;
 
     const body = buildReportBody(data);
 
@@ -271,7 +278,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
           )}
 
           <div className="flex gap-2 sm:ml-auto">
-            <Button variant="ghost" size="sm" onClick={handleClose}>
+            <Button variant="ghost" size="sm" onClick={handleClose} disabled={isSubmitting}>
               Cancel
             </Button>
             <Button

@@ -55,10 +55,10 @@ export async function gatherCrashReportData(
     currentModel: currentModel || null,
     deviceId,
     timestamp: new Date().toISOString(),
-    logFileName: logAttachment.file_name,
-    logContent: logAttachment.redacted_content,
+    logFileName: logAttachment.fileName,
+    logContent: logAttachment.redactedContent,
     logTruncated: logAttachment.truncated,
-    logStatusNote: logAttachment.status_note,
+    logStatusNote: logAttachment.statusNote,
   };
 }
 
@@ -82,22 +82,22 @@ export interface ManualReportData {
 }
 
 export interface LatestLogAttachment {
-  file_name: string | null;
-  redacted_content: string;
-  original_byte_count: number;
-  included_byte_count: number;
+  fileName: string | null;
+  redactedContent: string;
+  originalByteCount: number;
+  includedByteCount: number;
   truncated: boolean;
-  status_note: string;
+  statusNote: string;
 }
 
 async function getLatestLogAttachment(): Promise<LatestLogAttachment> {
   return invoke<LatestLogAttachment>('get_latest_log_for_bug_report').catch(() => ({
-    file_name: null,
-    redacted_content: '',
-    original_byte_count: 0,
-    included_byte_count: 0,
+    fileName: null,
+    redactedContent: '',
+    originalByteCount: 0,
+    includedByteCount: 0,
     truncated: false,
-    status_note: 'Failed to retrieve log.',
+    statusNote: 'Failed to retrieve log.',
   }));
 }
 
@@ -136,10 +136,10 @@ export async function gatherManualReportData(
     currentModel: currentModel || null,
     deviceId,
     timestamp: new Date().toISOString(),
-    logFileName: logAttachment.file_name,
-    logContent: logAttachment.redacted_content,
+    logFileName: logAttachment.fileName,
+    logContent: logAttachment.redactedContent,
     logTruncated: logAttachment.truncated,
-    logStatusNote: logAttachment.status_note,
+    logStatusNote: logAttachment.statusNote,
   };
 }
 
@@ -193,9 +193,9 @@ export function buildReportBody(
       parts.push(`_Source: ${data.logFileName}_`);
     }
     parts.push('');
-    parts.push('```');
+    parts.push('~~~');
     parts.push(data.logContent);
-    parts.push('```');
+    parts.push('~~~');
     parts.push('');
     parts.push('_Log content has been automatically redacted for common sensitive patterns._');
   } else if (!includeLog && options.omittedLogNote) {
@@ -224,7 +224,7 @@ interface ReportEnvironmentPayload {
   osVersion: string;
   architecture: string;
   currentModel?: string | null;
-  deviceId?: string;
+  deviceId: string;
   timestamp: string;
 }
 
@@ -246,8 +246,6 @@ export type BugReportPayload =
     }
   | {
       kind: 'crash';
-      name?: string;
-      email?: string;
       message?: string;
       crash: {
         errorMessage: string;
