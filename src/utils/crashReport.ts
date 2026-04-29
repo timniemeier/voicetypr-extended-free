@@ -85,7 +85,7 @@ export interface LatestLogAttachment {
   fileName: string | null;
   redactedContent: string;
   originalByteCount: number;
-  includedByteCount: number;
+  redactedByteCount: number;
   truncated: boolean;
   statusNote: string;
 }
@@ -95,7 +95,7 @@ async function getLatestLogAttachment(): Promise<LatestLogAttachment> {
     fileName: null,
     redactedContent: '',
     originalByteCount: 0,
-    includedByteCount: 0,
+    redactedByteCount: 0,
     truncated: false,
     statusNote: 'Failed to retrieve log.',
   }));

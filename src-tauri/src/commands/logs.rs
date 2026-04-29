@@ -112,8 +112,8 @@ pub struct LatestLogAttachment {
     pub redacted_content: String,
     /// Original total file size in bytes before truncation.
     pub original_byte_count: u64,
-    /// Number of bytes returned in `redacted_content`.
-    pub included_byte_count: u64,
+    /// Number of bytes returned in `redacted_content` after redaction.
+    pub redacted_byte_count: u64,
     /// True when the file was larger than MAX_TAIL_BYTES and was truncated.
     pub truncated: bool,
     /// Human-readable status for the frontend (empty when log exists).
@@ -260,14 +260,14 @@ pub fn redact_log_content(content: &str) -> String {
 
     // Home directory paths: /Users/<name>/ on macOS, /home/<name>/ on Linux, C:\Users\<name>\ on Windows.
     let home_re = HOME_RE.get_or_init(|| {
-        regex::Regex::new(r"(?:/Users/[^/\s]+|/home/[^/\s]+|C:\\Users\\[^\\\s]+)").unwrap()
+        regex::Regex::new(r"(?:/Users/[^/\r\n]+|/home/[^/\r\n]+|C:\\Users\\[^\\\r\n]+)").unwrap()
     });
     result = home_re.replace_all(&result, "[HOME_DIR]").to_string();
 
     // Other absolute local paths commonly emitted by diagnostics/logging.
     let absolute_path_re = ABSOLUTE_PATH_RE.get_or_init(|| {
         regex::Regex::new(
-            r#"(^|[\s\"'(=])(/(?:Volumes|tmp|private|var|opt|Applications)/[^\s\"',)]+|[A-Za-z]:\\[^\s\"',)]+)"#,
+            r#"(^|[\s\"'(=])(/(?:Volumes|tmp|private|var|opt|Applications|Library|System|etc|usr|proc)/[^\r\n\"',)]+|[A-Za-z]:\\[^\r\n\"',)]+)"#,
         )
         .unwrap()
     });
@@ -296,7 +296,7 @@ pub async fn get_latest_log_for_bug_report(
             file_name: None,
             redacted_content: String::new(),
             original_byte_count: 0,
-            included_byte_count: 0,
+            redacted_byte_count: 0,
             truncated: false,
             status_note: "No log file found. Logs will be included automatically when available."
                 .to_string(),
@@ -316,7 +316,7 @@ pub async fn get_latest_log_for_bug_report(
                 file_name,
                 redacted_content: String::new(),
                 original_byte_count: 0,
-                included_byte_count: 0,
+                redacted_byte_count: 0,
                 truncated: false,
                 status_note: "Found a log file, but it could not be read.".to_string(),
             });
@@ -324,13 +324,13 @@ pub async fn get_latest_log_for_bug_report(
     };
 
     let redacted = redact_log_content(&raw);
-    let included_byte_count = redacted.len() as u64;
+    let redacted_byte_count = redacted.len() as u64;
 
     Ok(LatestLogAttachment {
         file_name,
         redacted_content: redacted,
         original_byte_count,
-        included_byte_count,
+        redacted_byte_count,
         truncated,
         status_note: String::new(),
     })
