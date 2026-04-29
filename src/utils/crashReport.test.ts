@@ -72,16 +72,6 @@ describe('buildReportBody', () => {
     expect(body).toContain('INFO redacted log line');
   });
 
-  it('uses an omitted-log note when the email body excludes logs', () => {
-    const body = buildReportBody(baseReport, {
-      includeLog: false,
-      omittedLogNote: 'Log omitted from email draft.',
-    });
-
-    expect(body).toContain('## Latest App Log');
-    expect(body).toContain('> Log omitted from email draft.');
-    expect(body).not.toContain('INFO redacted log line');
-  });
 
   it('labels latest log status notes without log content', () => {
     const body = buildReportBody({
@@ -93,13 +83,6 @@ describe('buildReportBody', () => {
 
     expect(body).toContain('## Latest App Log');
     expect(body).toContain('> No log file found.');
-  });
-
-  it('omits the latest log section when logs are disabled without a note', () => {
-    const body = buildReportBody(baseReport, { includeLog: false });
-
-    expect(body).not.toContain('## Latest App Log');
-    expect(body).not.toContain('INFO redacted log line');
   });
 });
 

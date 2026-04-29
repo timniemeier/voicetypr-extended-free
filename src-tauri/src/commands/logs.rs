@@ -103,7 +103,7 @@ pub async fn open_logs_folder(app: tauri::AppHandle) -> Result<(), String> {
 const MAX_TAIL_BYTES: u64 = 40_960; // ~40KB
 
 /// Response for the latest-log bug-report attachment command.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LatestLogAttachment {
     /// File name of the selected log (e.g. "voicetypr-2026-04-27.log").

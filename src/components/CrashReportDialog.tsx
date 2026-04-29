@@ -58,6 +58,8 @@ export function CrashReportDialog({
     clearCopyTimer();
   };
 
+  // Closing invalidates any in-flight gather/submit action. Reopening increments again in the effect below.
+  // The double increment is intentional: stale async completions must never update a fresh dialog session.
   const handleClose = () => {
     actionIdRef.current += 1;
     resetState();

@@ -81,7 +81,7 @@ export interface ManualReportData {
   logStatusNote: string;
 }
 
-export interface LatestLogAttachment {
+interface LatestLogAttachment {
   fileName: string | null;
   redactedContent: string;
   truncated: boolean;
@@ -139,15 +139,7 @@ export async function gatherManualReportData(
   };
 }
 
-interface BuildReportBodyOptions {
-  includeLog?: boolean;
-  omittedLogNote?: string;
-}
-
-export function buildReportBody(
-  data: ManualReportData,
-  options: BuildReportBodyOptions = {}
-): string {
+export function buildReportBody(data: ManualReportData): string {
   const parts: string[] = [];
 
   parts.push('## VoiceTypr Support Report');
@@ -176,10 +168,8 @@ export function buildReportBody(
   parts.push(`| Timestamp | ${data.timestamp} |`);
   parts.push('');
 
-  const includeLog = options.includeLog ?? true;
-
   // Latest log section
-  if (includeLog && data.logContent) {
+  if (data.logContent) {
     parts.push('## Latest App Log');
     parts.push('');
     if (data.logTruncated) {
@@ -194,10 +184,6 @@ export function buildReportBody(
     parts.push('~~~');
     parts.push('');
     parts.push('_Log content has been automatically redacted for common sensitive patterns._');
-  } else if (!includeLog && options.omittedLogNote) {
-    parts.push('## Latest App Log');
-    parts.push('');
-    parts.push(`> ${options.omittedLogNote}`);
   } else if (data.logStatusNote) {
     parts.push('## Latest App Log');
     parts.push('');
