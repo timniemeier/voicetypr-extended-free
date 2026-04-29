@@ -200,7 +200,14 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSubmitReport();
+          }}
+          noValidate
+        >
           <div className="space-y-2">
             <Label htmlFor="report-name">Name (optional)</Label>
             <Input
@@ -283,11 +290,11 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
             </div>
           )}
 
-        </div>
 
         <DialogFooter className="flex-col sm:flex-row gap-2">
           {fallbackReportData && (
             <Button
+              type="button"
               variant="outline"
               size="sm"
               onClick={handleCopyReport}
@@ -300,12 +307,12 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
           )}
 
           <div className="flex gap-2 sm:ml-auto">
-            <Button variant="ghost" size="sm" onClick={handleClose} disabled={isSubmitting}>
+            <Button type="button" variant="ghost" size="sm" onClick={handleClose} disabled={isSubmitting}>
               Cancel
             </Button>
             <Button
+              type="submit"
               size="sm"
-              onClick={handleSubmitReport}
               disabled={isSubmitting}
               aria-busy={isSubmitting}
               className="gap-2"
@@ -315,6 +322,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
             </Button>
           </div>
         </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

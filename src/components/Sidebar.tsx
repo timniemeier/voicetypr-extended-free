@@ -147,7 +147,6 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => setShowReportBugDialog(true)}
-                  isActive={false}
                   className="group relative rounded-lg px-3 py-2 hover:bg-accent/50 transition-colors"
                 >
                   <Bug className="h-4 w-4 transition-transform group-hover:scale-110" />

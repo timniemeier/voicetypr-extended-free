@@ -180,9 +180,9 @@ export function buildReportBody(data: ManualReportData): string {
       parts.push(`_Source: ${data.logFileName}_`);
     }
     parts.push('');
-    parts.push('~~~');
+    parts.push('```');
     parts.push(data.logContent);
-    parts.push('~~~');
+    parts.push('```');
     parts.push('');
     parts.push('_Log content has been automatically redacted for common sensitive patterns._');
   } else if (data.logStatusNote) {

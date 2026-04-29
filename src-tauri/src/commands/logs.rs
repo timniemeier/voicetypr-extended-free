@@ -142,7 +142,14 @@ pub fn find_newest_log(log_dir: &std::path::Path) -> Option<std::path::PathBuf> 
             if let Ok(meta) = entry.metadata() {
                 if let Ok(modified) = meta.modified() {
                     match &newest {
-                        Some((_, t)) if modified <= *t => {}
+                        Some((_, best_modified)) if modified < *best_modified => {}
+                        Some((best_path, best_modified)) if modified == *best_modified => {
+                            let best_name =
+                                best_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                            if file_name > best_name {
+                                newest = Some((path.clone(), modified));
+                            }
+                        }
                         _ => newest = Some((path.clone(), modified)),
                     }
                 }
@@ -189,7 +196,6 @@ pub fn read_log_tail(
 /// Redact common sensitive patterns from log content.
 /// Preserves context for debugging while removing secrets.
 pub fn redact_log_content(content: &str) -> String {
-
     static WRAPPED_SECRET_RE: OnceLock<regex::Regex> = OnceLock::new();
     static UNQUOTED_SECRET_RE: OnceLock<regex::Regex> = OnceLock::new();
     static BEARER_RE: OnceLock<regex::Regex> = OnceLock::new();

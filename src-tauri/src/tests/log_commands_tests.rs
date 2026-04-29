@@ -16,9 +16,7 @@ mod tests {
         let path_c = dir.path().join("voicetypr-2026-04-27.log");
 
         std::fs::write(&path_a, "old").unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(1100));
         std::fs::write(&path_b, "mid").unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(1100));
         std::fs::write(&path_c, "new").unwrap();
 
         let newest = find_newest_log(dir.path());
