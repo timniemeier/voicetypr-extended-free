@@ -83,6 +83,43 @@ describe('ReportBugDialog', () => {
     expect(submitManualReport).not.toHaveBeenCalled();
   });
 
+  it('resets form state when reopened', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<ReportBugDialog isOpen onClose={vi.fn()} />);
+
+    await user.type(screen.getByLabelText(/name/i), 'Moin');
+    await user.type(screen.getByLabelText(/email/i), 'bad-email');
+    await user.type(screen.getByLabelText(/message/i), 'Draft issue');
+    await user.click(screen.getByRole('button', { name: /submit/i }));
+    expect(screen.getByText(/enter a valid email/i)).toBeInTheDocument();
+
+    rerender(<ReportBugDialog isOpen={false} onClose={vi.fn()} />);
+    rerender(<ReportBugDialog isOpen onClose={vi.fn()} />);
+
+    expect(screen.getByLabelText(/name/i)).toHaveValue('');
+    expect(screen.getByLabelText(/email/i)).toHaveValue('');
+    expect(screen.getByLabelText(/message/i)).toHaveValue('');
+    expect(screen.queryByText(/enter a valid email/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps the dialog open when gathering report data fails', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(gatherManualReportData).mockRejectedValueOnce(new Error('invoke failed'));
+
+    render(<ReportBugDialog isOpen onClose={onClose} />);
+
+    await user.type(screen.getByLabelText(/message/i), 'The app broke');
+    await user.click(screen.getByRole('button', { name: /submit/i }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('Failed to gather report data');
+    });
+    expect(submitManualReport).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('does not show copy fallback before a submit failure', () => {
     render(<ReportBugDialog isOpen onClose={vi.fn()} />);
 

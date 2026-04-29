@@ -110,10 +110,6 @@ pub struct LatestLogAttachment {
     pub file_name: Option<String>,
     /// Redacted tail content ready for frontend display/copy.
     pub redacted_content: String,
-    /// Original total file size in bytes before truncation.
-    pub original_byte_count: u64,
-    /// Number of bytes returned in `redacted_content` after redaction.
-    pub redacted_byte_count: u64,
     /// True when the file was larger than MAX_TAIL_BYTES and was truncated.
     pub truncated: bool,
     /// Human-readable status for the frontend (empty when log exists).
@@ -295,8 +291,6 @@ pub async fn get_latest_log_for_bug_report(
         return Ok(LatestLogAttachment {
             file_name: None,
             redacted_content: String::new(),
-            original_byte_count: 0,
-            redacted_byte_count: 0,
             truncated: false,
             status_note: "No log file found. Logs will be included automatically when available."
                 .to_string(),
@@ -308,15 +302,13 @@ pub async fn get_latest_log_for_bug_report(
         .and_then(|n| n.to_str())
         .map(|s| s.to_string());
 
-    let (raw, original_byte_count, truncated) = match read_log_tail(&log_path, MAX_TAIL_BYTES) {
+    let (raw, _original_byte_count, truncated) = match read_log_tail(&log_path, MAX_TAIL_BYTES) {
         Ok(result) => result,
         Err(e) => {
             log::warn!("Failed to read log tail {:?}: {}", log_path, e);
             return Ok(LatestLogAttachment {
                 file_name,
                 redacted_content: String::new(),
-                original_byte_count: 0,
-                redacted_byte_count: 0,
                 truncated: false,
                 status_note: "Found a log file, but it could not be read.".to_string(),
             });
@@ -324,13 +316,10 @@ pub async fn get_latest_log_for_bug_report(
     };
 
     let redacted = redact_log_content(&raw);
-    let redacted_byte_count = redacted.len() as u64;
 
     Ok(LatestLogAttachment {
         file_name,
         redacted_content: redacted,
-        original_byte_count,
-        redacted_byte_count,
         truncated,
         status_note: String::new(),
     })

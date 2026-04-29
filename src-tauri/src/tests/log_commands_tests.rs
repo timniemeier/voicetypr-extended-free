@@ -288,8 +288,6 @@ mod tests {
         let attachment = LatestLogAttachment {
             file_name: Some("voicetypr-2026-04-27.log".to_string()),
             redacted_content: "[REDACTED] log content".to_string(),
-            original_byte_count: 1024,
-            redacted_byte_count: 512,
             truncated: true,
             status_note: String::new(),
         };
@@ -297,11 +295,8 @@ mod tests {
         let json = serde_json::to_string(&attachment).unwrap();
         assert!(json.contains("voicetypr-2026-04-27.log"));
         assert!(json.contains("[REDACTED] log content"));
-        assert!(json.contains("1024"));
-        assert!(json.contains("512"));
         assert!(json.contains("\"fileName\":\"voicetypr-2026-04-27.log\""));
         assert!(json.contains("\"redactedContent\":\"[REDACTED] log content\""));
-        assert!(json.contains("\"redactedByteCount\":512"));
         assert!(json.contains("\"truncated\":true"));
     }
 
@@ -310,8 +305,6 @@ mod tests {
         let attachment = LatestLogAttachment {
             file_name: None,
             redacted_content: String::new(),
-            original_byte_count: 0,
-            redacted_byte_count: 0,
             truncated: false,
             status_note: "No log file found.".to_string(),
         };

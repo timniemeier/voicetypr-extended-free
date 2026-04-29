@@ -84,8 +84,6 @@ export interface ManualReportData {
 export interface LatestLogAttachment {
   fileName: string | null;
   redactedContent: string;
-  originalByteCount: number;
-  redactedByteCount: number;
   truncated: boolean;
   statusNote: string;
 }
@@ -94,8 +92,6 @@ async function getLatestLogAttachment(): Promise<LatestLogAttachment> {
   return invoke<LatestLogAttachment>('get_latest_log_for_bug_report').catch(() => ({
     fileName: null,
     redactedContent: '',
-    originalByteCount: 0,
-    redactedByteCount: 0,
     truncated: false,
     statusNote: 'Failed to retrieve log.',
   }));
