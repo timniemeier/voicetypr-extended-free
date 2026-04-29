@@ -69,6 +69,20 @@ describe('ReportBugDialog', () => {
     expect(screen.getByLabelText(/message/i)).toHaveAttribute('aria-required', 'true');
   });
 
+  it('validates optional email format before submitting', async () => {
+    const user = userEvent.setup();
+
+    render(<ReportBugDialog isOpen onClose={vi.fn()} />);
+
+    await user.type(screen.getByLabelText(/email/i), 'not-an-email');
+    await user.type(screen.getByLabelText(/message/i), 'The app broke');
+    await user.click(screen.getByRole('button', { name: /submit/i }));
+
+    expect(screen.getByText(/enter a valid email/i)).toBeInTheDocument();
+    expect(gatherManualReportData).not.toHaveBeenCalled();
+    expect(submitManualReport).not.toHaveBeenCalled();
+  });
+
   it('does not show copy fallback before a submit failure', () => {
     render(<ReportBugDialog isOpen onClose={vi.fn()} />);
 

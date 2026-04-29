@@ -58,6 +58,16 @@ describe('CrashReportDialog', () => {
     expect(screen.queryByRole('button', { name: /copy details/i })).not.toBeInTheDocument();
   });
 
+  it('shows a fallback state when crash detail gathering fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(gatherCrashReportData).mockRejectedValueOnce(new Error('invoke failed'));
+
+    render(<CrashReportDialog error={new Error('Boom')} isOpen onClose={vi.fn()} />);
+
+    expect(await screen.findByText(/failed to gather crash details/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /submit/i })).toBeDisabled();
+  });
+
   it('submits gathered crash data directly to support', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();

@@ -120,7 +120,8 @@ export function CrashReportDialog({
     setSubmitError('');
     setCopied(false);
     clearCopyTimer();
-    const actionId = actionIdRef.current;
+    const actionId = actionIdRef.current + 1;
+    actionIdRef.current = actionId;
     setIsSubmitting(true);
     try {
       const result = await submitCrashReport(crashData);

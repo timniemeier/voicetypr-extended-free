@@ -31,6 +31,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [messageError, setMessageError] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -66,6 +67,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
     setEmail('');
     setMessage('');
     setMessageError('');
+    setEmailError('');
     setSubmitError('');
     setIsSubmitting(false);
     setCopied(false);
@@ -80,12 +82,24 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
   };
 
   const validate = (): boolean => {
+    let isValid = true;
+
     if (!message.trim()) {
       setMessageError('Please describe the issue you are experiencing.');
-      return false;
+      isValid = false;
+    } else {
+      setMessageError('');
     }
-    setMessageError('');
-    return true;
+
+    const trimmedEmail = email.trim();
+    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setEmailError('Enter a valid email address or leave it blank.');
+      isValid = false;
+    } else {
+      setEmailError('');
+    }
+
+    return isValid;
   };
 
   useEffect(() => {
@@ -96,8 +110,6 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
   }, [isOpen, resetForm]);
 
   const buildAndGather = async (actionId: number): Promise<ManualReportData | null> => {
-    if (!validate()) return null;
-
     resetSubmitFallback();
 
     try {
@@ -119,6 +131,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
   };
 
   const handleSubmitReport = async () => {
+    if (!validate()) return;
     const actionId = actionIdRef.current + 1;
     actionIdRef.current = actionId;
     setIsSubmitting(true);
@@ -193,6 +206,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
             <Input
               id="report-name"
               placeholder="Your name"
+              maxLength={200}
               value={name}
               onChange={(e) => {
                 setName(e.target.value);
@@ -208,11 +222,20 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
               type="email"
               placeholder="your@email.com"
               value={email}
+              maxLength={254}
+              aria-invalid={Boolean(emailError)}
+              aria-describedby={emailError ? 'report-email-error' : undefined}
               onChange={(e) => {
                 setEmail(e.target.value);
+                if (emailError) setEmailError('');
                 if (submitError) resetSubmitFallback();
               }}
             />
+            {emailError && (
+              <p id="report-email-error" role="alert" className="text-xs text-destructive">
+                {emailError}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

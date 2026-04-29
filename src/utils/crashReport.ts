@@ -298,7 +298,7 @@ interface ApiResponseBody {
   message?: string;
 }
 
-const BUG_REPORT_TIMEOUT_MS = 15_000;
+const BUG_REPORT_TIMEOUT_MS = 10_000;
 
 
 async function submitBugReport(payload: BugReportPayload): Promise<ReportSubmitResult> {

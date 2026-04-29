@@ -94,6 +94,13 @@ describe('buildReportBody', () => {
     expect(body).toContain('## Latest App Log');
     expect(body).toContain('> No log file found.');
   });
+
+  it('omits the latest log section when logs are disabled without a note', () => {
+    const body = buildReportBody(baseReport, { includeLog: false });
+
+    expect(body).not.toContain('## Latest App Log');
+    expect(body).not.toContain('INFO redacted log line');
+  });
 });
 
 
@@ -210,6 +217,16 @@ describe('report submission payloads', () => {
     await expect(submitManualReport(baseReport)).resolves.toEqual({
       success: false,
       message: 'Webhook misconfigured.',
+    });
+  });
+
+  it('returns a failure result when the request times out', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    global.fetch = vi.fn().mockRejectedValue(new DOMException('Timed out', 'TimeoutError'));
+
+    await expect(submitManualReport(baseReport)).resolves.toEqual({
+      success: false,
+      message: 'Could not connect to VoiceTypr Support. Please use Copy Report instead.',
     });
   });
 });
