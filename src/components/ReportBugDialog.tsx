@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bug, Copy, Check, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -47,21 +47,21 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
     };
   }, []);
 
-  const clearCopyTimer = () => {
+  const clearCopyTimer = useCallback(() => {
     if (copiedTimerRef.current) {
       clearTimeout(copiedTimerRef.current);
       copiedTimerRef.current = null;
     }
-  };
+  }, []);
 
-  const resetSubmitFallback = () => {
+  const resetSubmitFallback = useCallback(() => {
     setSubmitError('');
     setFallbackReportData(null);
     setCopied(false);
     clearCopyTimer();
-  };
+  }, [clearCopyTimer]);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setName('');
     setEmail('');
     setMessage('');
@@ -71,7 +71,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
     setCopied(false);
     setFallbackReportData(null);
     clearCopyTimer();
-  };
+  }, [clearCopyTimer]);
 
   const handleClose = () => {
     actionIdRef.current += 1;
@@ -93,13 +93,12 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
       actionIdRef.current += 1;
       resetForm();
     }
-  }, [isOpen]);
+  }, [isOpen, resetForm]);
 
   const buildAndGather = async (actionId: number): Promise<ManualReportData | null> => {
     if (!validate()) return null;
 
     resetSubmitFallback();
-    setIsSubmitting(true);
 
     try {
       const data = await gatherManualReportData(
@@ -122,6 +121,7 @@ export function ReportBugDialog({ isOpen, onClose }: ReportBugDialogProps) {
   const handleSubmitReport = async () => {
     const actionId = actionIdRef.current + 1;
     actionIdRef.current = actionId;
+    setIsSubmitting(true);
     const data = await buildAndGather(actionId);
     if (!data) {
       if (actionIdRef.current === actionId) {

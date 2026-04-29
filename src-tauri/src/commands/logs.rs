@@ -2,6 +2,7 @@ use chrono::{Local, NaiveDate};
 use serde::Serialize;
 use std::fs;
 use std::io::Read;
+use std::sync::OnceLock;
 use tauri::Manager;
 
 #[tauri::command]
@@ -192,7 +193,6 @@ pub fn read_log_tail(
 /// Redact common sensitive patterns from log content.
 /// Preserves context for debugging while removing secrets.
 pub fn redact_log_content(content: &str) -> String {
-    use std::sync::OnceLock;
 
     static WRAPPED_SECRET_RE: OnceLock<regex::Regex> = OnceLock::new();
     static UNQUOTED_SECRET_RE: OnceLock<regex::Regex> = OnceLock::new();
