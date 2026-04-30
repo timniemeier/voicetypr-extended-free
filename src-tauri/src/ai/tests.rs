@@ -123,7 +123,7 @@ mod tests {
     fn test_ai_provider_factory_rejects_unknown_anthropic_model() {
         let config = AIProviderConfig {
             provider: "anthropic".to_string(),
-            model: "claude-opus-4-7".to_string(), // intentionally unsupported
+            model: "claude-opus-4-7".to_string(), // real model, intentionally not in our curated formatting list
             api_key: "test_key_12345".to_string(),
             enabled: true,
             options: HashMap::new(),

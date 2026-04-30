@@ -12,9 +12,13 @@ use std::time::Duration;
 const SUPPORTED_MODELS: &[&str] = &[
     "claude-haiku-4-5",
     "claude-sonnet-4-6",
-    // Legacy support for users who selected these before this restoration:
-    "claude-haiku-4-5-latest",
-    "claude-sonnet-4-5-latest",
+    // `claude-sonnet-4-5` is still a documented Anthropic API alias and is
+    // kept for users who selected it during 1.12.0/1.12.1 before the provider
+    // was removed. We deliberately do NOT carry the older `*-latest` curated
+    // IDs forward: they were never documented as valid Anthropic Messages API
+    // model identifiers, and accepting them here would mask a 404
+    // model_not_found at first formatting. Users still on those will see a
+    // clear \"Unsupported model\" error and reselect from the dropdown.
     "claude-sonnet-4-5",
 ];
 
@@ -284,23 +288,33 @@ mod tests {
     }
 
     #[test]
-    fn test_provider_creation_accepts_legacy_aliases() {
-        // These are kept in SUPPORTED_MODELS for back-compat with users
-        // who selected them before native Anthropic was removed in 1.12.1.
-        // If a future cleanup drops one, this test catches it.
-        for alias in &[
-            "claude-haiku-4-5-latest",
-            "claude-sonnet-4-5-latest",
-            "claude-sonnet-4-5",
-        ] {
+    fn test_provider_creation_accepts_legacy_alias() {
+        // claude-sonnet-4-5 stays in SUPPORTED_MODELS for back-compat with
+        // users who selected it during the 1.12.0/1.12.1 window. If a future
+        // cleanup drops it, this test catches the regression.
+        let result = AnthropicProvider::new(
+            "test_key_12345".to_string(),
+            "claude-sonnet-4-5".to_string(),
+            HashMap::new(),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_provider_creation_rejects_undocumented_latest_aliases() {
+        // Pre-1.12.1 builds shipped these as the curated IDs, but they are
+        // not documented as valid Anthropic Messages API model identifiers.
+        // We intentionally fail fast with a clear "Unsupported model" error
+        // here rather than letting the upstream API return 404 model_not_found.
+        for stale in &["claude-haiku-4-5-latest", "claude-sonnet-4-5-latest"] {
             let result = AnthropicProvider::new(
                 "test_key_12345".to_string(),
-                alias.to_string(),
+                stale.to_string(),
                 HashMap::new(),
             );
             assert!(
-                result.is_ok(),
-                "Legacy alias {alias} should be accepted"
+                result.is_err(),
+                "Undocumented alias {stale} should be rejected"
             );
         }
     }
