@@ -1,3 +1,16 @@
+## [1.12.3](https://github.com/moinulmoin/voicetypr/compare/v1.12.2...v1.12.3) (2026-04-29)
+
+### Features
+
+* **settings:** add an auto-paste toggle so users can keep transcripts in history without automatically inserting them ([1c47ac3](https://github.com/moinulmoin/voicetypr/commit/1c47ac3))
+* **support:** add in-app bug and crash report submission with system info and the latest redacted app log excerpt ([77a9b26](https://github.com/moinulmoin/voicetypr/commit/77a9b26), [be90102](https://github.com/moinulmoin/voicetypr/commit/be90102))
+
+### Bug Fixes
+
+* **support:** harden report validation, stale-submit guards, fallback behavior, and log redaction for private report delivery ([b8291e3](https://github.com/moinulmoin/voicetypr/commit/b8291e3), [6953429](https://github.com/moinulmoin/voicetypr/commit/6953429), [fa45160](https://github.com/moinulmoin/voicetypr/commit/fa45160))
+* **ui:** restore scrolling for Upload, General, Help, Advanced, and Formatting settings pages after the sidebar layout changes ([551fc4e](https://github.com/moinulmoin/voicetypr/commit/551fc4e), [10eb66f](https://github.com/moinulmoin/voicetypr/commit/10eb66f))
+
+
 ## [1.12.2](https://github.com/moinulmoin/voicetypr/compare/v1.12.1...v1.12.2) (2026-04-27)
 
 ### Bug Fixes
