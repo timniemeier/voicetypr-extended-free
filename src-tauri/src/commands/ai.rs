@@ -24,6 +24,7 @@ const LEGACY_OPENAI_NO_AUTH_KEY: &str = "ai_openai_no_auth";
 const AI_PROVIDER_KEYS: &[&str] = &[
     "ai_api_key_gemini",
     "ai_api_key_openai",
+    "ai_api_key_anthropic",
     "ai_api_key_custom",
 ];
 
@@ -259,7 +260,7 @@ lazy_static::lazy_static! {
 }
 
 // Supported AI providers
-const ALLOWED_PROVIDERS: &[&str] = &["gemini", "openai", "custom"];
+const ALLOWED_PROVIDERS: &[&str] = &["gemini", "openai", "anthropic", "custom"];
 
 fn validate_provider_name(provider: &str) -> Result<(), String> {
     // First check format
@@ -866,7 +867,7 @@ pub async fn enhance_transcription(text: String, app: tauri::AppHandle) -> Resul
         opts.insert("no_auth".into(), serde_json::Value::Bool(cached.is_none()));
 
         ("openai".to_string(), cached.unwrap_or_default(), opts)
-    } else if provider == "gemini" {
+    } else if provider == "gemini" || provider == "anthropic" {
         // Require API key from in-memory cache
         let cache = API_KEY_CACHE
             .lock()
@@ -1033,11 +1034,20 @@ const GEMINI_MODELS: &[(&str, &str, bool)] = &[
     ("gemini-2.5-flash-lite", "Gemini 2.5 Flash Lite", true),
 ];
 
+/// Curated list of Anthropic Claude models for text formatting
+/// Haiku 4.5 (fastest, cheapest) and Sonnet 4.6 (balanced).
+/// Opus is intentionally excluded - too slow/expensive for inline formatting.
+const ANTHROPIC_MODELS: &[(&str, &str, bool)] = &[
+    ("claude-haiku-4-5", "Claude Haiku 4.5", true),
+    ("claude-sonnet-4-6", "Claude Sonnet 4.6", true),
+];
+
 /// Get curated models for a provider (no API call needed)
 fn get_curated_models(provider: &str) -> Vec<ProviderModel> {
     let models: &[(&str, &str, bool)] = match provider {
         "openai" => OPENAI_MODELS,
         "gemini" => GEMINI_MODELS,
+        "anthropic" => ANTHROPIC_MODELS,
         _ => return vec![],
     };
 
@@ -1059,7 +1069,7 @@ pub async fn list_provider_models(
     _app: tauri::AppHandle,
 ) -> Result<Vec<ProviderModel>, String> {
     // Validate provider
-    if !["openai", "gemini"].contains(&provider.as_str()) {
+    if !["openai", "gemini", "anthropic"].contains(&provider.as_str()) {
         return Err(format!(
             "Unsupported provider for model listing: {}",
             provider
@@ -1085,6 +1095,7 @@ mod tests {
         // Valid providers
         assert!(validate_provider_name("gemini").is_ok());
         assert!(validate_provider_name("openai").is_ok());
+        assert!(validate_provider_name("anthropic").is_ok());
         assert!(validate_provider_name("custom").is_ok());
 
         // Groq is no longer supported
@@ -1116,6 +1127,12 @@ mod tests {
         assert!(gemini_models
             .iter()
             .any(|m| m.id == "gemini-2.5-flash-lite"));
+
+        // Anthropic models
+        let anthropic_models = get_curated_models("anthropic");
+        assert_eq!(anthropic_models.len(), 2);
+        assert!(anthropic_models.iter().any(|m| m.id == "claude-haiku-4-5"));
+        assert!(anthropic_models.iter().any(|m| m.id == "claude-sonnet-4-6"));
 
         // Unknown provider returns empty list
         let unknown_models = get_curated_models("unknown");
