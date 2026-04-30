@@ -1038,6 +1038,12 @@ const GEMINI_MODELS: &[(&str, &str, bool)] = &[
 /// Curated list of Anthropic Claude models for text formatting
 /// Haiku 4.5 (fastest, cheapest) and Sonnet 4.6 (balanced).
 /// Opus is intentionally excluded - too slow/expensive for inline formatting.
+///
+/// Note: this list is intentionally narrower than
+/// `ai::anthropic::SUPPORTED_MODELS`, which also accepts `claude-sonnet-4-5`
+/// for back-compat with users who selected it during the 1.12.0/1.12.1 window.
+/// We deliberately do not re-advertise deprecated IDs in the dropdown - keep
+/// new selections on the current curated set.
 const ANTHROPIC_MODELS: &[(&str, &str, bool)] = &[
     ("claude-haiku-4-5", "Claude Haiku 4.5", true),
     ("claude-sonnet-4-6", "Claude Sonnet 4.6", true),
