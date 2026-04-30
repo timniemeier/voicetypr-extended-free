@@ -282,4 +282,26 @@ mod tests {
         );
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn test_provider_creation_accepts_legacy_aliases() {
+        // These are kept in SUPPORTED_MODELS for back-compat with users
+        // who selected them before native Anthropic was removed in 1.12.1.
+        // If a future cleanup drops one, this test catches it.
+        for alias in &[
+            "claude-haiku-4-5-latest",
+            "claude-sonnet-4-5-latest",
+            "claude-sonnet-4-5",
+        ] {
+            let result = AnthropicProvider::new(
+                "test_key_12345".to_string(),
+                alias.to_string(),
+                HashMap::new(),
+            );
+            assert!(
+                result.is_ok(),
+                "Legacy alias {alias} should be accepted"
+            );
+        }
+    }
 }

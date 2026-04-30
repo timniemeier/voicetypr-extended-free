@@ -868,7 +868,8 @@ pub async fn enhance_transcription(text: String, app: tauri::AppHandle) -> Resul
 
         ("openai".to_string(), cached.unwrap_or_default(), opts)
     } else if provider == "gemini" || provider == "anthropic" {
-        // Require API key from in-memory cache
+        // Both providers read the key from the in-memory cache and skip the
+        // OpenAI-style probe at save time; first-use surfaces auth/model errors.
         let cache = API_KEY_CACHE
             .lock()
             .map_err(|_| "Failed to access cache".to_string())?;
