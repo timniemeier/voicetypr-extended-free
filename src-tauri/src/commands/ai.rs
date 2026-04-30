@@ -1046,7 +1046,7 @@ const GEMINI_MODELS: &[(&str, &str, bool)] = &[
 /// new selections on the current curated set.
 const ANTHROPIC_MODELS: &[(&str, &str, bool)] = &[
     ("claude-haiku-4-5", "Claude Haiku 4.5", true),
-    ("claude-sonnet-4-6", "Claude Sonnet 4.6", true),
+    ("claude-sonnet-4-6", "Claude Sonnet 4.6", false),
 ];
 
 /// Get curated models for a provider (no API call needed)
