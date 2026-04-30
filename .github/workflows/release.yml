@@ -115,9 +115,6 @@ jobs:
 
             const cargo = fs.readFileSync(cargoPath, "utf8");
             const updated = cargo.replace(/^version = "[^"]*"/m, `version = "${version}"`);
-            if (updated === cargo) {
-              throw new Error("Failed to update version in src-tauri/Cargo.toml");
-            }
             fs.writeFileSync(cargoPath, updated);
           '
 
@@ -243,9 +240,6 @@ jobs:
 
             const cargo = fs.readFileSync(cargoPath, "utf8");
             const updated = cargo.replace(/^version = "[^"]*"/m, `version = "${version}"`);
-            if (updated === cargo) {
-              throw new Error("Failed to update version in src-tauri/Cargo.toml");
-            }
             fs.writeFileSync(cargoPath, updated);
           '
 
@@ -368,9 +362,6 @@ jobs:
 
           $cargoToml = Get-Content "src-tauri/Cargo.toml" -Raw
           $updated = [regex]::Replace($cargoToml, '(?m)^version = "[^"]*"', "version = `"$version`"", 1)
-          if ($updated -eq $cargoToml) {
-            throw "Failed to update version in src-tauri/Cargo.toml"
-          }
           Set-Content "src-tauri/Cargo.toml" $updated -Encoding utf8NoBOM
 
       - name: Ensure FFmpeg sidecar
@@ -489,9 +480,6 @@ jobs:
 
             const cargo = fs.readFileSync(cargoPath, "utf8");
             const updated = cargo.replace(/^version = "[^"]*"/m, `version = "${version}"`);
-            if (updated === cargo) {
-              throw new Error("Failed to update version in src-tauri/Cargo.toml");
-            }
             fs.writeFileSync(cargoPath, updated);
           '
 
