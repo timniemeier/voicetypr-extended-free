@@ -38,3 +38,11 @@ export const fromBackendOptions = (options: EnhancementOptions): {
   preset: options.preset,
   customVocabulary: options.custom_vocabulary,
 });
+
+// User-supplied prompt overrides. `null` per field means "use built-in default".
+export interface CustomPrompts {
+  base: string | null;
+  prompts: string | null;
+  email: string | null;
+  commit: string | null;
+}

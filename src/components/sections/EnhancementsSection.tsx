@@ -5,7 +5,14 @@ import { ProviderCard } from "@/components/ProviderCard";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import type { EnhancementOptions } from "@/types/ai";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import type { CustomPrompts, EnhancementOptions } from "@/types/ai";
 import { fromBackendOptions, toBackendOptions } from "@/types/ai";
 import { AI_PROVIDERS } from "@/types/providers";
 import { useAllProviderModels } from "@/hooks/useProviderModels";
@@ -14,9 +21,9 @@ import { getErrorMessage } from "@/utils/error";
 import { useReadinessState } from "@/contexts/ReadinessContext";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
-import { Info } from "lucide-react";
+import { ChevronDown, FileText, GitCommit, Info, Mail, Sparkles } from "lucide-react";
 
 interface AISettings {
   enabled: boolean;
@@ -24,6 +31,16 @@ interface AISettings {
   model: string;
   hasApiKey: boolean;
 }
+
+const EMPTY_CUSTOM_PROMPTS: CustomPrompts = {
+  base: null,
+  prompts: null,
+  email: null,
+  commit: null,
+};
+
+// Must match `MAX_CUSTOM_PROMPT_LEN` in src-tauri/src/ai/prompts.rs.
+const MAX_CUSTOM_PROMPT_LEN = 8192;
 
 export function EnhancementsSection() {
   const readiness = useReadinessState();
@@ -51,6 +68,145 @@ export function EnhancementsSection() {
     customVocabulary: [],
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+  // Custom prompts (advanced) state.
+  const [customPrompts, setCustomPrompts] = useState<CustomPrompts>(EMPTY_CUSTOM_PROMPTS);
+  const [defaultPrompts, setDefaultPrompts] = useState<CustomPrompts>(EMPTY_CUSTOM_PROMPTS);
+  const [customPromptsLoaded, setCustomPromptsLoaded] = useState(false);
+  const [customPromptsOpen, setCustomPromptsOpen] = useState(false);
+  // Which prompt field is currently displayed for editing. Independent from the
+  // runtime preset selector in Formatting Options.
+  const [editingPrompt, setEditingPrompt] = useState<keyof CustomPrompts>('base');
+  // Local textarea drafts so typing stays smooth and we only persist on blur.
+  const [promptDrafts, setPromptDrafts] = useState<Record<keyof CustomPrompts, string>>({
+    base: '',
+    prompts: '',
+    email: '',
+    commit: '',
+  });
+  // Track which fields the user has edited locally vs. ones that just mirror the
+  // resolved (override-or-default) value. Only edited fields are written back.
+  const editedFieldsRef = useRef<Record<keyof CustomPrompts, boolean>>({
+    base: false,
+    prompts: false,
+    email: false,
+    commit: false,
+  });
+
+  const loadCustomPrompts = useCallback(async () => {
+    try {
+      const [overridesRaw, defaultsRaw] = await Promise.all([
+        invoke<CustomPrompts>("get_custom_prompts"),
+        invoke<CustomPrompts>("get_default_prompts"),
+      ]);
+      // Defensive: fall back to the empty shape if the backend (or test mock)
+      // returns undefined/null so subsequent reads never throw.
+      const overrides: CustomPrompts = overridesRaw ?? EMPTY_CUSTOM_PROMPTS;
+      const defaults: CustomPrompts = defaultsRaw ?? EMPTY_CUSTOM_PROMPTS;
+      setCustomPrompts(overrides);
+      setDefaultPrompts(defaults);
+      setPromptDrafts({
+        base: overrides.base ?? defaults.base ?? '',
+        prompts: overrides.prompts ?? defaults.prompts ?? '',
+        email: overrides.email ?? defaults.email ?? '',
+        commit: overrides.commit ?? defaults.commit ?? '',
+      });
+      editedFieldsRef.current = { base: false, prompts: false, email: false, commit: false };
+      setCustomPromptsLoaded(true);
+    } catch (error) {
+      console.error("Failed to load custom prompts:", error);
+    }
+  }, []);
+
+  const persistCustomPrompts = useCallback(async (next: CustomPrompts) => {
+    try {
+      await invoke("update_custom_prompts", { prompts: next });
+    } catch (error) {
+      const message = getErrorMessage(error, "Failed to save custom prompts");
+      toast.error(message);
+    }
+  }, []);
+
+  const handlePromptBlur = (field: keyof CustomPrompts) => {
+    if (!editedFieldsRef.current[field]) return;
+    editedFieldsRef.current[field] = false;
+
+    const draft = promptDrafts[field];
+    const defaultValue = defaultPrompts[field] ?? '';
+    // Treat empty string and "matches the default" as no-override (null).
+    const trimmed = draft;
+    const newValue: string | null =
+      trimmed === '' || trimmed === defaultValue ? null : trimmed;
+
+    if (customPrompts[field] === newValue) return;
+
+    const next: CustomPrompts = { ...customPrompts, [field]: newValue };
+    setCustomPrompts(next);
+    void persistCustomPrompts(next);
+  };
+
+  const handleResetPrompt = (field: keyof CustomPrompts) => {
+    const defaultValue = defaultPrompts[field] ?? '';
+    setPromptDrafts((prev) => ({ ...prev, [field]: defaultValue }));
+    editedFieldsRef.current[field] = false;
+    if (customPrompts[field] === null) return;
+    const next: CustomPrompts = { ...customPrompts, [field]: null };
+    setCustomPrompts(next);
+    void persistCustomPrompts(next);
+  };
+
+  // Switching tabs flushes any pending blur so unsaved edits to the outgoing
+  // tab's textarea aren't lost when it unmounts.
+  const handleEditingPromptChange = (next: keyof CustomPrompts) => {
+    if (next === editingPrompt) return;
+    if (editedFieldsRef.current[editingPrompt]) {
+      handlePromptBlur(editingPrompt);
+    }
+    setEditingPrompt(next);
+  };
+
+  const customPromptFields: Array<{
+    key: keyof CustomPrompts;
+    label: string;
+    icon: typeof FileText;
+    description: string;
+    rows: number;
+    hint?: string;
+  }> = [
+    {
+      key: 'base',
+      label: 'Base',
+      icon: FileText,
+      description: 'Always-applied post-processor; cleans grammar, fillers, capitalization.',
+      rows: 12,
+      hint: 'Use {language} where you want the output language inserted.',
+    },
+    {
+      key: 'prompts',
+      label: 'Prompts',
+      icon: Sparkles,
+      description: 'Layered on top of Base when the Prompts preset is active.',
+      rows: 8,
+    },
+    {
+      key: 'email',
+      label: 'Email',
+      icon: Mail,
+      description: 'Layered on top of Base when the Email preset is active.',
+      rows: 8,
+    },
+    {
+      key: 'commit',
+      label: 'Commit',
+      icon: GitCommit,
+      description: 'Layered on top of Base when the Commit preset is active.',
+      rows: 6,
+    },
+  ];
+
+  const activePromptField =
+    customPromptFields.find((f) => f.key === editingPrompt) ?? customPromptFields[0];
+  const isActiveOverridden = customPrompts[activePromptField.key] !== null;
 
   const loadEnhancementOptions = async () => {
     try {
@@ -139,9 +295,10 @@ export function EnhancementsSection() {
     if (!settingsLoaded) {
       loadAISettings();
       loadEnhancementOptions();
+      loadCustomPrompts();
       setSettingsLoaded(true);
     }
-  }, [settingsLoaded, loadAISettings]);
+  }, [settingsLoaded, loadAISettings, loadCustomPrompts]);
 
   // Listen for AI events
   useEffect(() => {
@@ -443,6 +600,123 @@ export function EnhancementsSection() {
               />
             </div>
           </div>
+
+          {/* Custom Prompts (Advanced) */}
+          <Collapsible
+            open={customPromptsOpen}
+            onOpenChange={setCustomPromptsOpen}
+            className="space-y-4"
+          >
+            <CollapsibleTrigger
+              data-testid="custom-prompts-toggle"
+              className="w-full flex items-center gap-2 text-left"
+            >
+              <h2 className="text-base font-semibold">Custom Prompts (Advanced)</h2>
+              <div className="h-px bg-border/50 flex-1" />
+              <ChevronDown
+                className={`h-4 w-4 text-muted-foreground transition-transform ${
+                  customPromptsOpen ? "rotate-180" : ""
+                }`}
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Override the prompts sent to the AI model. Leave a field unchanged
+                to use the built-in default. Reset clears the override and restores
+                the shipped prompt.
+              </p>
+              {!customPromptsLoaded ? (
+                <div
+                  data-testid="custom-prompts-loading"
+                  className="text-xs text-muted-foreground py-4"
+                >
+                  Loading prompts...
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Tab pill selector — matches the Formatting Options visual style. */}
+                  <div className="flex flex-wrap gap-2">
+                    {customPromptFields.map((field) => {
+                      const Icon = field.icon;
+                      const isSelected = editingPrompt === field.key;
+                      const isOverridden = customPrompts[field.key] !== null;
+                      return (
+                        <Button
+                          key={field.key}
+                          type="button"
+                          variant={isSelected ? "default" : "outline"}
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => handleEditingPromptChange(field.key)}
+                          data-testid={`custom-prompt-tab-${field.key}`}
+                        >
+                          <Icon className="h-4 w-4" />
+                          {field.label}
+                          {isOverridden && (
+                            <span className="ml-1 text-xs text-amber-600 dark:text-amber-500 font-normal">
+                              (custom)
+                            </span>
+                          )}
+                        </Button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Active tab description */}
+                  <p className="text-sm text-muted-foreground">
+                    {activePromptField.description}
+                  </p>
+
+                  {/* Single textarea for the active tab */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label
+                        htmlFor={`custom-prompt-${activePromptField.key}`}
+                        className="text-sm font-medium"
+                      >
+                        {activePromptField.label} Prompt
+                        {isActiveOverridden && (
+                          <span className="ml-2 text-xs text-amber-600 dark:text-amber-500 font-normal">
+                            (custom)
+                          </span>
+                        )}
+                      </Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleResetPrompt(activePromptField.key)}
+                        disabled={!isActiveOverridden}
+                        data-testid={`reset-prompt-${activePromptField.key}`}
+                      >
+                        Reset to default
+                      </Button>
+                    </div>
+                    <Textarea
+                      id={`custom-prompt-${activePromptField.key}`}
+                      data-testid={`custom-prompt-${activePromptField.key}`}
+                      rows={activePromptField.rows}
+                      maxLength={MAX_CUSTOM_PROMPT_LEN}
+                      value={promptDrafts[activePromptField.key]}
+                      onChange={(e) => {
+                        editedFieldsRef.current[activePromptField.key] = true;
+                        const value = e.target.value;
+                        setPromptDrafts((prev) => ({
+                          ...prev,
+                          [activePromptField.key]: value,
+                        }));
+                      }}
+                      onBlur={() => handlePromptBlur(activePromptField.key)}
+                      className="font-mono text-xs"
+                    />
+                    {editingPrompt === 'base' && activePromptField.hint && (
+                      <p className="text-xs text-muted-foreground">{activePromptField.hint}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
 
           {/* Setup Guide */}
           {!aiSettings.enabled && (

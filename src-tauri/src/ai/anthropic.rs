@@ -178,6 +178,7 @@ impl AIProvider for AnthropicProvider {
             request.context.as_deref(),
             &request.options.unwrap_or_default(),
             request.language.as_deref(),
+            &request.custom_prompts.unwrap_or_default(),
         );
 
         let temperature = self

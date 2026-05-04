@@ -1,5 +1,8 @@
 use crate::ai::openai::{is_unsupported_token_parameter_error, model_uses_max_completion_tokens};
-use crate::ai::{AIEnhancementRequest, AIProviderConfig, AIProviderFactory, EnhancementOptions};
+use crate::ai::prompts::validate_custom_prompts;
+use crate::ai::{
+    AIEnhancementRequest, AIProviderConfig, AIProviderFactory, CustomPrompts, EnhancementOptions,
+};
 use crate::commands::audio::pill_toast;
 use crate::secure_store;
 use once_cell::sync::Lazy;
@@ -749,6 +752,48 @@ pub async fn update_enhancement_options(
 }
 
 #[tauri::command]
+pub async fn get_custom_prompts(app: tauri::AppHandle) -> Result<CustomPrompts, String> {
+    let store = app.store("settings").map_err(|e| e.to_string())?;
+
+    if let Some(value) = store.get("custom_prompts") {
+        serde_json::from_value(value.clone())
+            .map_err(|e| format!("Failed to parse custom prompts: {}", e))
+    } else {
+        Ok(CustomPrompts::default())
+    }
+}
+
+#[tauri::command]
+pub async fn update_custom_prompts(
+    prompts: CustomPrompts,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    // Reject oversize overrides before they hit the store.
+    validate_custom_prompts(&prompts)?;
+
+    let store = app.store("settings").map_err(|e| e.to_string())?;
+
+    store.set(
+        "custom_prompts",
+        serde_json::to_value(&prompts)
+            .map_err(|e| format!("Failed to serialize custom prompts: {}", e))?,
+    );
+
+    store
+        .save()
+        .map_err(|e| format!("Failed to save custom prompts: {}", e))?;
+
+    log::info!("Custom prompts updated");
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_default_prompts() -> Result<CustomPrompts, String> {
+    Ok(CustomPrompts::defaults())
+}
+
+#[tauri::command]
 pub async fn enhance_transcription(text: String, app: tauri::AppHandle) -> Result<String, String> {
     // Quick validation
     if text.trim().is_empty() {
@@ -893,6 +938,9 @@ pub async fn enhance_transcription(text: String, app: tauri::AppHandle) -> Resul
     // Load enhancement options
     let enhancement_options = get_enhancement_options(app.clone()).await.ok();
 
+    // Load user-supplied custom prompts (None/empty per-field falls back to built-in defaults).
+    let custom_prompts = get_custom_prompts(app.clone()).await.ok();
+
     // Get the user's selected language for formatting output
     let language = {
         let lang_store = app.store("settings").map_err(|e| e.to_string())?;
@@ -928,6 +976,7 @@ pub async fn enhance_transcription(text: String, app: tauri::AppHandle) -> Resul
         context: None,
         options: enhancement_options,
         language,
+        custom_prompts,
     };
 
     match provider.enhance_text(request).await {
