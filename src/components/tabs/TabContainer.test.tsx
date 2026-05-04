@@ -40,10 +40,6 @@ vi.mock('./AdvancedTab', () => ({
   AdvancedTab: () => <div data-testid="advanced-tab">Advanced</div>
 }));
 
-vi.mock('./AccountTab', () => ({
-  AccountTab: () => <div data-testid="account-tab">Account</div>
-}));
-
 vi.mock('./AboutTab', () => ({
   AboutTab: () => <div data-testid="about-tab">About</div>
 }));
@@ -71,10 +67,7 @@ describe('TabContainer', () => {
     
     rerender(<TabContainer activeSection="advanced" />);
     expect(screen.getByTestId('advanced-tab')).toBeInTheDocument();
-    
-    rerender(<TabContainer activeSection="license" />);
-    expect(screen.getByTestId('account-tab')).toBeInTheDocument();
-    
+
     rerender(<TabContainer activeSection="about" />);
     expect(screen.getByTestId('about-tab')).toBeInTheDocument();
     

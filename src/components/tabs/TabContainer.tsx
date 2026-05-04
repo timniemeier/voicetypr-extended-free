@@ -1,6 +1,5 @@
 // Direct imports for instant desktop app experience
 import { AboutTab } from "./AboutTab";
-import { AccountTab } from "./AccountTab";
 import { AdvancedTab } from "./AdvancedTab";
 import { EnhancementsTab } from "./EnhancementsTab";
 import { HelpTab } from "./HelpTab";
@@ -91,9 +90,6 @@ export function TabContainer({ activeSection }: TabContainerProps) {
 
       case "formatting":
         return <EnhancementsTab />;
-
-      case "license":
-        return <AccountTab />;
 
       case "help":
         return <HelpTab />;
