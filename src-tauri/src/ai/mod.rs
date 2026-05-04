@@ -9,7 +9,7 @@ pub mod openai;
 pub mod prompts;
 
 pub use config::MAX_TEXT_LENGTH;
-pub use prompts::EnhancementOptions;
+pub use prompts::{CustomPrompts, EnhancementOptions};
 
 #[cfg(test)]
 mod tests;
@@ -34,6 +34,10 @@ pub struct AIEnhancementRequest {
     /// ISO 639-1 language code for output language (e.g., "en", "es", "fr")
     #[serde(default)]
     pub language: Option<String>,
+    /// User-supplied prompt overrides. `None` or per-field `None`/empty falls back to
+    /// the shipped defaults.
+    #[serde(default)]
+    pub custom_prompts: Option<CustomPrompts>,
 }
 
 impl AIEnhancementRequest {

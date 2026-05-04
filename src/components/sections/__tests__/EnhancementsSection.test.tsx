@@ -69,6 +69,20 @@ describe('EnhancementsSection', () => {
       if (cmd === 'get_openai_config') {
         return Promise.resolve({ baseUrl: 'https://api.openai.com/v1' });
       }
+      if (cmd === 'get_custom_prompts') {
+        return Promise.resolve({ base: null, prompts: null, email: null, commit: null });
+      }
+      if (cmd === 'get_default_prompts') {
+        return Promise.resolve({
+          base: 'DEFAULT BASE {language}',
+          prompts: 'DEFAULT PROMPTS',
+          email: 'DEFAULT EMAIL',
+          commit: 'DEFAULT COMMIT',
+        });
+      }
+      if (cmd === 'update_custom_prompts') {
+        return Promise.resolve();
+      }
       return Promise.resolve(mockAISettings);
     });
   });
@@ -483,6 +497,39 @@ describe('EnhancementsSection', () => {
         enabled: false,
         provider: '',
         model: '',
+      });
+    });
+  });
+
+  it('persists custom prompt overrides on blur', async () => {
+    render(<EnhancementsSection />);
+
+    // Wait for the section (and the default prompts) to load.
+    await waitFor(() => {
+      expect(screen.getByText('Custom Prompts (Advanced)')).toBeInTheDocument();
+    });
+
+    // Expand the panel.
+    fireEvent.click(screen.getByTestId('custom-prompts-toggle'));
+
+    // Wait for the textarea to render with the default value.
+    const baseTextarea = await screen.findByTestId('custom-prompt-base') as HTMLTextAreaElement;
+    await waitFor(() => {
+      expect(baseTextarea.value).toBe('DEFAULT BASE {language}');
+    });
+
+    // Edit the value, then blur to trigger persistence.
+    fireEvent.change(baseTextarea, { target: { value: 'CUSTOM BASE {language}' } });
+    fireEvent.blur(baseTextarea);
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('update_custom_prompts', {
+        prompts: {
+          base: 'CUSTOM BASE {language}',
+          prompts: null,
+          email: null,
+          commit: null,
+        },
       });
     });
   });
