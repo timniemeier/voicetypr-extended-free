@@ -272,6 +272,76 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_custom_prompts_length_cap() {
+        use crate::ai::prompts::{validate_custom_prompts, CustomPrompts, MAX_CUSTOM_PROMPT_LEN};
+
+        // All None -> Ok
+        let empty = CustomPrompts::default();
+        assert!(validate_custom_prompts(&empty).is_ok());
+
+        // At the cap -> Ok
+        let at_cap = CustomPrompts {
+            base: Some("a".repeat(MAX_CUSTOM_PROMPT_LEN)),
+            ..CustomPrompts::default()
+        };
+        assert!(validate_custom_prompts(&at_cap).is_ok());
+
+        // One byte over -> Err naming the offending field.
+        let over_cap = CustomPrompts {
+            email: Some("x".repeat(MAX_CUSTOM_PROMPT_LEN + 1)),
+            ..CustomPrompts::default()
+        };
+        let err = validate_custom_prompts(&over_cap).unwrap_err();
+        assert!(err.contains("email"), "error should name the field: {}", err);
+        assert!(
+            err.contains(&MAX_CUSTOM_PROMPT_LEN.to_string()),
+            "error should mention the limit: {}",
+            err
+        );
+
+        // Defaults helper produces strings well under the cap.
+        let defaults = CustomPrompts::defaults();
+        assert!(validate_custom_prompts(&defaults).is_ok());
+    }
+
+    #[test]
+    fn test_custom_prompts_serde_roundtrip() {
+        use crate::ai::prompts::CustomPrompts;
+
+        // Mixed shape: None, Some(""), Some(non-empty with placeholder), Some(short).
+        let original = CustomPrompts {
+            base: None,
+            prompts: Some("".to_string()),
+            email: Some("hello {language}".to_string()),
+            commit: Some("x".to_string()),
+        };
+
+        let value = serde_json::to_value(&original).expect("serialize");
+        let roundtripped: CustomPrompts =
+            serde_json::from_value(value).expect("deserialize");
+
+        assert_eq!(roundtripped.base, original.base);
+        assert_eq!(roundtripped.prompts, original.prompts);
+        assert_eq!(roundtripped.email, original.email);
+        assert_eq!(roundtripped.commit, original.commit);
+
+        // An empty JSON object must deserialize into the all-None default — this
+        // is the on-disk reality when the store has never been written and is
+        // what `#[serde(default)]` on each field guarantees.
+        let from_empty: CustomPrompts =
+            serde_json::from_str("{}").expect("deserialize empty object");
+        let defaults = CustomPrompts::default();
+        assert_eq!(from_empty.base, defaults.base);
+        assert_eq!(from_empty.prompts, defaults.prompts);
+        assert_eq!(from_empty.email, defaults.email);
+        assert_eq!(from_empty.commit, defaults.commit);
+        assert!(from_empty.base.is_none());
+        assert!(from_empty.prompts.is_none());
+        assert!(from_empty.email.is_none());
+        assert!(from_empty.commit.is_none());
+    }
+
+    #[test]
     fn test_self_correction_rules_in_all_presets() {
         use crate::ai::prompts::{
             build_enhancement_prompt, CustomPrompts, EnhancementOptions, EnhancementPreset,

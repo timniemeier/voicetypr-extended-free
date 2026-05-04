@@ -1,4 +1,5 @@
 use crate::ai::openai::{is_unsupported_token_parameter_error, model_uses_max_completion_tokens};
+use crate::ai::prompts::validate_custom_prompts;
 use crate::ai::{
     AIEnhancementRequest, AIProviderConfig, AIProviderFactory, CustomPrompts, EnhancementOptions,
 };
@@ -767,6 +768,9 @@ pub async fn update_custom_prompts(
     prompts: CustomPrompts,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
+    // Reject oversize overrides before they hit the store.
+    validate_custom_prompts(&prompts)?;
+
     let store = app.store("settings").map_err(|e| e.to_string())?;
 
     store.set(

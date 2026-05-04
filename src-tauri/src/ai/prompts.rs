@@ -121,6 +121,10 @@ impl Default for EnhancementOptions {
     }
 }
 
+/// Maximum length, in bytes, of any single user-supplied prompt override.
+/// Beyond this we reject the update to keep token cost and store size bounded.
+pub const MAX_CUSTOM_PROMPT_LEN: usize = 8192;
+
 /// User-supplied prompt overrides. Each field is `None` (or empty string) when the
 /// built-in default should be used.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -146,6 +150,28 @@ impl CustomPrompts {
             commit: Some(COMMIT_TRANSFORM.to_string()),
         }
     }
+}
+
+/// Validate that no override exceeds `MAX_CUSTOM_PROMPT_LEN`. Returns the offending
+/// field name in the error so the UI can surface it to the user.
+pub fn validate_custom_prompts(prompts: &CustomPrompts) -> Result<(), String> {
+    let fields: [(&str, Option<&String>); 4] = [
+        ("base", prompts.base.as_ref()),
+        ("prompts", prompts.prompts.as_ref()),
+        ("email", prompts.email.as_ref()),
+        ("commit", prompts.commit.as_ref()),
+    ];
+    for (name, value) in fields {
+        if let Some(s) = value {
+            if s.len() > MAX_CUSTOM_PROMPT_LEN {
+                return Err(format!(
+                    "Prompt '{}' exceeds maximum length of {} characters",
+                    name, MAX_CUSTOM_PROMPT_LEN
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Resolve a single override: use `Some(non-empty)` when present, else fall back

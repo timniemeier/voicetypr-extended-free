@@ -39,6 +39,9 @@ const EMPTY_CUSTOM_PROMPTS: CustomPrompts = {
   commit: null,
 };
 
+// Must match `MAX_CUSTOM_PROMPT_LEN` in src-tauri/src/ai/prompts.rs.
+const MAX_CUSTOM_PROMPT_LEN = 8192;
+
 export function EnhancementsSection() {
   const readiness = useReadinessState();
   const { fetchModels, getModels, isLoading: isModelsLoading, getError, clearModels } = useAllProviderModels();
@@ -69,6 +72,7 @@ export function EnhancementsSection() {
   // Custom prompts (advanced) state.
   const [customPrompts, setCustomPrompts] = useState<CustomPrompts>(EMPTY_CUSTOM_PROMPTS);
   const [defaultPrompts, setDefaultPrompts] = useState<CustomPrompts>(EMPTY_CUSTOM_PROMPTS);
+  const [customPromptsLoaded, setCustomPromptsLoaded] = useState(false);
   const [customPromptsOpen, setCustomPromptsOpen] = useState(false);
   // Local textarea drafts so typing stays smooth and we only persist on blur.
   const [promptDrafts, setPromptDrafts] = useState<Record<keyof CustomPrompts, string>>({
@@ -105,6 +109,7 @@ export function EnhancementsSection() {
         commit: overrides.commit ?? defaults.commit ?? '',
       });
       editedFieldsRef.current = { base: false, prompts: false, email: false, commit: false };
+      setCustomPromptsLoaded(true);
     } catch (error) {
       console.error("Failed to load custom prompts:", error);
     }
@@ -598,7 +603,15 @@ export function EnhancementsSection() {
                 to use the built-in default. Reset clears the override and restores
                 the shipped prompt.
               </p>
-              {customPromptFields.map((field) => {
+              {!customPromptsLoaded ? (
+                <div
+                  data-testid="custom-prompts-loading"
+                  className="text-xs text-muted-foreground py-4"
+                >
+                  Loading prompts...
+                </div>
+              ) : (
+              customPromptFields.map((field) => {
                 const isOverridden = customPrompts[field.key] !== null;
                 return (
                   <div key={field.key} className="space-y-2">
@@ -634,6 +647,7 @@ export function EnhancementsSection() {
                       id={`custom-prompt-${field.key}`}
                       data-testid={`custom-prompt-${field.key}`}
                       rows={field.rows}
+                      maxLength={MAX_CUSTOM_PROMPT_LEN}
                       value={promptDrafts[field.key]}
                       onChange={(e) => {
                         editedFieldsRef.current[field.key] = true;
@@ -648,7 +662,8 @@ export function EnhancementsSection() {
                     )}
                   </div>
                 );
-              })}
+              })
+              )}
             </CollapsibleContent>
           </Collapsible>
 
