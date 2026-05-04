@@ -32,7 +32,7 @@
         "style-src": "'self' 'unsafe-inline'",
         "img-src": "'self' asset: data:",
         "font-src": "'self'",
-        "connect-src": "'self' ipc: https://voicetypr.com https://api.voicetypr.com https://github.com asset:",
+        "connect-src": "'self' ipc: https://github.com asset:",
         "media-src": "'self'"
       }
     }

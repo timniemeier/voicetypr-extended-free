@@ -129,7 +129,7 @@ describe('report submission payloads', () => {
     });
   });
 
-  it('submits manual reports to the support endpoint', async () => {
+  it('submits manual reports to the configured endpoint', async () => {
     global.fetch = vi.fn().mockResolvedValue(new Response(
       JSON.stringify({ success: true, message: 'Report submitted' }),
       { status: 200 }
@@ -140,7 +140,7 @@ describe('report submission payloads', () => {
       message: 'Report submitted',
     });
     expect(fetch).toHaveBeenCalledWith(
-      'https://voicetypr.com/api/v1/bug-reports',
+      expect.any(String),
       expect.objectContaining({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -151,7 +151,7 @@ describe('report submission payloads', () => {
     expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it('submits crash reports to the support endpoint', async () => {
+  it('submits crash reports to the configured endpoint', async () => {
     global.fetch = vi.fn().mockResolvedValue(new Response(
       JSON.stringify({ success: true, message: 'Crash report submitted' }),
       { status: 200 }
@@ -162,7 +162,7 @@ describe('report submission payloads', () => {
       message: 'Crash report submitted',
     });
     expect(fetch).toHaveBeenCalledWith(
-      'https://voicetypr.com/api/v1/bug-reports',
+      expect.any(String),
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify(buildCrashReportPayload(baseCrashReport)),

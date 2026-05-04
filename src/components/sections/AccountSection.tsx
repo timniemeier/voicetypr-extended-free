@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 export function AccountSection() {
-  const { status, isLoading, checkStatus, activateLicense, deactivateLicense, openPurchasePage } = useLicense();
+  const { status, isLoading, checkStatus, activateLicense, deactivateLicense } = useLicense();
   const [licenseKey, setLicenseKey] = useState('');
   const [isActivating, setIsActivating] = useState(false);
 
@@ -211,14 +211,6 @@ export function AccountSection() {
                   )}
 
                   <div className="flex gap-2">
-                    <Button
-                      onClick={openPurchasePage}
-                      className="flex-1"
-                      size="sm"
-                    >
-                      <Crown className="h-3.5 w-3.5 mr-1.5" />
-                      Buy License
-                    </Button>
                     <Button
                       onClick={() => openExternalLink("https://polar.sh/ideaplexa/portal")}
                       variant="outline"

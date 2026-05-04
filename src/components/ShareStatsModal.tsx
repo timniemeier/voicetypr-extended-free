@@ -160,12 +160,6 @@ export function ShareStatsModal({ open, onOpenChange, stats }: ShareStatsModalPr
     //   ctx.fillText(`🔥 ${stats.currentStreak} Day Streak`, canvas.width / 2, streakY);
     // }
 
-    // Website at the bottom - scaled up
-    ctx.font = "56px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-    ctx.textAlign = "center";
-    ctx.fillText("voicetypr.com", canvas.width / 2, canvas.height - 80);
-
     // Convert canvas to data URL
     const dataUrl = canvas.toDataURL("image/png");
     setImageDataUrl(dataUrl);

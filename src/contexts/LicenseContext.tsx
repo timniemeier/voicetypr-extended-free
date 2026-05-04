@@ -11,7 +11,6 @@ interface LicenseContextValue {
   restoreLicense: () => Promise<void>;
   activateLicense: (key: string) => Promise<void>;
   deactivateLicense: () => Promise<void>;
-  openPurchasePage: () => Promise<void>;
 }
 
 const LicenseContext = createContext<LicenseContextValue | undefined>(undefined);
@@ -135,16 +134,6 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const openPurchasePage = async () => {
-    try {
-      await invoke('open_purchase_page');
-    } catch (error) {
-      console.error('Failed to open purchase page:', error);
-      // Fallback to window.open
-      window.open('https://voicetypr.com/#pricing', '_blank');
-    }
-  };
-
   // Check license status on mount
   useEffect(() => {
     console.log(`[${new Date().toISOString()}] Frontend: LicenseProvider mounted, checking status...`);
@@ -158,7 +147,6 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     restoreLicense,
     activateLicense,
     deactivateLicense,
-    openPurchasePage,
   };
 
   return (
