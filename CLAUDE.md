@@ -119,3 +119,9 @@ pnpm typecheck    # Run TypeScript compiler
 IMPORTANT: Read `agent-docs` for more details on the project before making any changes.
 IMPORTANT: Read `agent-reports` to understand whats going on
 IMPORTANT: Read `CLAUDE.local.md` for any local changes.
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan:
+`specs/001-local-ai-formatting/plan.md`
+<!-- SPECKIT END -->

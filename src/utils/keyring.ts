@@ -81,7 +81,7 @@ export const removeApiKey = async (provider: string): Promise<void> => {
 
 // Load all API keys to backend cache (for app startup)
 export const loadApiKeysToCache = async (): Promise<void> => {
-  const providers = ['gemini', 'openai', 'anthropic', 'custom'];
+  const providers = ['gemini', 'openai', 'anthropic', 'custom', 'ollama'];
   
   for (const provider of providers) {
     try {

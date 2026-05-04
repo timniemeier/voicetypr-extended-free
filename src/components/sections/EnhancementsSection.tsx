@@ -57,7 +57,9 @@ export function EnhancementsSection() {
   const [showOpenAIConfig, setShowOpenAIConfig] = useState(false);
   const [openAIDefaultBaseUrl, setOpenAIDefaultBaseUrl] = useState("https://api.openai.com/v1");
   const [customModelName, setCustomModelName] = useState<string>("");
+  const [ollamaModelName, setOllamaModelName] = useState<string>("");
   const [selectedProvider, setSelectedProvider] = useState<string>("");
+  const OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434/v1";
   const [isLoading, setIsLoading] = useState(false);
   const [providerApiKeys, setProviderApiKeys] = useState<Record<string, boolean>>({});
   const [enhancementOptions, setEnhancementOptions] = useState<{
@@ -228,8 +230,9 @@ export function EnhancementsSection() {
         let isConfigured = await hasApiKey(keyId);
 
         // For providers that may be configured without a keyring key (no-auth),
-        // fall back to backend-derived readiness (covers legacy OpenAI-compatible configs).
-        if ((providerId === 'custom' || providerId === 'openai') && !isConfigured) {
+        // fall back to backend-derived readiness (covers legacy OpenAI-compatible configs
+        // and the loopback Ollama default).
+        if ((providerId === 'custom' || providerId === 'openai' || providerId === 'ollama') && !isConfigured) {
           try {
             const providerSettings = await invoke<AISettings>('get_ai_settings_for_provider', {
               provider: providerId
@@ -272,7 +275,10 @@ export function EnhancementsSection() {
       if (settings.provider === 'custom') {
         setCustomModelName(settings.model);
       }
-      
+      if (settings.provider === 'ollama') {
+        setOllamaModelName(settings.model);
+      }
+
       setAISettings(settings);
 
       // If readiness state shows AI is ready, update the provider key status
@@ -280,8 +286,12 @@ export function EnhancementsSection() {
         setProviderApiKeys(prev => ({ ...prev, [settings.provider]: true }));
       }
 
-      // Pre-fetch models for all providers with API keys (list is static, so this is fast)
-      const providersWithKeys = allProviders.filter(p => keyStatus[p] && p !== 'custom');
+      // Pre-fetch models for all providers with API keys (list is static, so this is fast).
+      // Skip providers without a curated model list — they ask the user to type the model id.
+      const providersWithKeys = allProviders.filter(p => {
+        const cfg = AI_PROVIDERS.find(prov => prov.id === p);
+        return keyStatus[p] && !cfg?.isCustom;
+      });
       providersWithKeys.forEach(providerId => {
         fetchModels(providerId);
       });
@@ -323,7 +333,7 @@ export function EnhancementsSection() {
       console.log('[AI Settings] API key removed:', event.payload.provider);
       let providerStillConfigured = false;
 
-      if (event.payload.provider === 'custom' || event.payload.provider === 'openai') {
+      if (event.payload.provider === 'custom' || event.payload.provider === 'openai' || event.payload.provider === 'ollama') {
         try {
           const providerSettings = await invoke<AISettings>('get_ai_settings_for_provider', {
             provider: event.payload.provider
@@ -413,7 +423,7 @@ export function EnhancementsSection() {
 
   const handleSetupApiKey = async (providerId: string) => {
     setSelectedProvider(providerId);
-    
+
     if (providerId === "custom") {
       // Custom provider - show OpenAI config modal
       try {
@@ -422,6 +432,10 @@ export function EnhancementsSection() {
       } catch (error) {
         console.error('Failed to load custom config:', error);
       }
+      setShowOpenAIConfig(true);
+    } else if (providerId === "ollama") {
+      // Ollama - reuse the OpenAI-compatible modal with a loopback default URL.
+      setOpenAIDefaultBaseUrl(OLLAMA_DEFAULT_BASE_URL);
       setShowOpenAIConfig(true);
     } else {
       // Standard provider - show API key modal
@@ -496,18 +510,19 @@ export function EnhancementsSection() {
 
   // Check if any provider has a valid API key
   const hasAnyValidConfig = Object.values(providerApiKeys).some(v => v);
-  
+
   // Check if we have a selected model
-  const isUsingCustomProvider = aiSettings.provider === 'custom';
+  const activeProviderConfig = AI_PROVIDERS.find(p => p.id === aiSettings.provider);
+  const isUsingCustomKindProvider = Boolean(activeProviderConfig?.isCustom);
   const hasSelectedModel = Boolean(
-    aiSettings.provider && 
-    aiSettings.model && 
-    (isUsingCustomProvider || providerApiKeys[aiSettings.provider])
+    aiSettings.provider &&
+    aiSettings.model &&
+    (isUsingCustomKindProvider || providerApiKeys[aiSettings.provider])
   );
 
   // Get active model name for display
-  const activeModelName = isUsingCustomProvider 
-    ? customModelName 
+  const activeModelName = isUsingCustomKindProvider
+    ? (aiSettings.provider === 'ollama' ? ollamaModelName : customModelName)
     : getModels(aiSettings.provider).find(m => m.id === aiSettings.model)?.name || aiSettings.model;
 
   return (
@@ -551,25 +566,32 @@ export function EnhancementsSection() {
             
             <div className="grid gap-3">
               {AI_PROVIDERS.map((provider) => {
-                // For custom provider, check if it's active
-                const isCustomActive = Boolean(
-                  provider.isCustom && 
-                  aiSettings.provider === 'custom' && 
-                  providerApiKeys['custom'] && 
+                // For isCustom providers, "active" means: provider is selected, has a key
+                // (or no-auth config), and AI Formatting is enabled.
+                const isCustomKindActive = Boolean(
+                  provider.isCustom &&
+                  aiSettings.provider === provider.id &&
+                  providerApiKeys[provider.id] &&
                   aiSettings.enabled
                 );
-                const isActive = provider.isCustom 
-                  ? isCustomActive
+                const isActive = provider.isCustom
+                  ? isCustomKindActive
                   : Boolean(aiSettings.provider === provider.id && aiSettings.enabled);
-                
+
+                const cardModelName = provider.id === 'ollama'
+                  ? ollamaModelName
+                  : provider.id === 'custom'
+                    ? customModelName
+                    : undefined;
+
                 return (
                   <ProviderCard
                     key={provider.id}
                     provider={provider}
                     hasApiKey={providerApiKeys[provider.id] || false}
                     isActive={isActive}
-                    selectedModel={provider.isCustom 
-                      ? (isCustomActive ? customModelName : null)
+                    selectedModel={provider.isCustom
+                      ? (isCustomKindActive ? (cardModelName ?? null) : null)
                       : (aiSettings.provider === provider.id ? aiSettings.model : null)
                     }
                     onSetupApiKey={() => handleSetupApiKey(provider.id)}
@@ -579,7 +601,7 @@ export function EnhancementsSection() {
                     modelsLoading={isModelsLoading(provider.id)}
                     modelsError={getError(provider.id)}
                     onRefreshModels={() => fetchModels(provider.id)}
-                    customModelName={provider.isCustom ? customModelName : undefined}
+                    customModelName={provider.isCustom ? cardModelName : undefined}
                   />
                 );
               })}
@@ -728,7 +750,7 @@ export function EnhancementsSection() {
                 <div className="space-y-2 flex-1">
                   <h3 className="font-medium text-sm">Quick Setup</h3>
                   <ol className="text-sm text-muted-foreground space-y-1.5 list-decimal list-inside">
-                    <li>Choose a provider above (OpenAI, Anthropic, or Google)</li>
+                    <li>Choose a provider above (OpenAI, Anthropic, Google, or Ollama)</li>
                     <li>Click "Add Key" and enter your API key</li>
                     <li>Select a model from the dropdown</li>
                     <li>Toggle "AI Formatting" on to enable</li>
@@ -754,7 +776,7 @@ export function EnhancementsSection() {
       <OpenAICompatConfigModal
         isOpen={showOpenAIConfig}
         defaultBaseUrl={openAIDefaultBaseUrl}
-        defaultModel={customModelName || ''}
+        defaultModel={(selectedProvider === 'ollama' ? ollamaModelName : customModelName) || ''}
         onClose={() => setShowOpenAIConfig(false)}
         onSubmit={async ({ baseUrl, model, apiKey }) => {
           try {
@@ -762,35 +784,55 @@ export function EnhancementsSection() {
             const trimmedBase = baseUrl.trim();
             const trimmedModel = model.trim();
             const trimmedKey = apiKey?.trim() || '';
+            const targetProvider = selectedProvider === 'ollama' ? 'ollama' : 'custom';
 
-            // Save custom OpenAI-compatible config (base URL)
-            await invoke('set_openai_config', { args: { baseUrl: trimmedBase } });
-
-            // Save API key under 'custom' provider
-            if (trimmedKey) {
-              await saveApiKey('custom', trimmedKey);
+            if (targetProvider === 'ollama') {
+              // Persist URL/no_auth/model and probe the endpoint in one shot.
+              await invoke('validate_and_cache_api_key', {
+                args: {
+                  provider: 'ollama',
+                  apiKey: trimmedKey || undefined,
+                  baseUrl: trimmedBase,
+                  model: trimmedModel,
+                },
+              });
+              if (trimmedKey) {
+                // Only persist a bearer token to the keyring when the user actually
+                // supplied one (rare proxied-Ollama case). Default Ollama is no-auth.
+                await saveApiKey('ollama', trimmedKey);
+              }
+            } else {
+              // Save custom OpenAI-compatible config (base URL)
+              await invoke('set_openai_config', { args: { baseUrl: trimmedBase } });
+              // Save API key under 'custom' provider
+              if (trimmedKey) {
+                await saveApiKey('custom', trimmedKey);
+              }
             }
 
             // Update settings
             const nextEnabled = aiSettings.enabled || !aiSettings.model;
-            await invoke('update_ai_settings', { enabled: nextEnabled, provider: 'custom', model: trimmedModel });
+            await invoke('update_ai_settings', { enabled: nextEnabled, provider: targetProvider, model: trimmedModel });
 
             // Update local state
-            setCustomModelName(trimmedModel);
-            setOpenAIDefaultBaseUrl(trimmedBase);
-            
+            if (targetProvider === 'ollama') {
+              setOllamaModelName(trimmedModel);
+            } else {
+              setCustomModelName(trimmedModel);
+              setOpenAIDefaultBaseUrl(trimmedBase);
+            }
+
             setAISettings(prev => ({
               ...prev,
               enabled: nextEnabled,
-              provider: 'custom',
+              provider: targetProvider,
               model: trimmedModel,
               hasApiKey: true
             }));
 
-            // Mark custom as configured (not openai)
-            setProviderApiKeys(prev => ({ ...prev, custom: true }));
+            setProviderApiKeys(prev => ({ ...prev, [targetProvider]: true }));
 
-            toast.success('Custom provider configured');
+            toast.success(targetProvider === 'ollama' ? 'Ollama provider configured' : 'Custom provider configured');
             setShowOpenAIConfig(false);
           } catch (error) {
             const message = getErrorMessage(error, 'Failed to save configuration');

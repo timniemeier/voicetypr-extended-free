@@ -501,6 +501,138 @@ describe('EnhancementsSection', () => {
     });
   });
 
+  it('renders provider cards in the documented order: OpenAI → Anthropic → Google Gemini → Ollama → Custom (US1 T012)', async () => {
+    render(<EnhancementsSection />);
+
+    await waitFor(() => {
+      expect(screen.getByText('AI Providers')).toBeInTheDocument();
+    });
+
+    const expectedNames = [
+      'OpenAI',
+      'Anthropic',
+      'Google Gemini',
+      'Ollama',
+      'Custom (OpenAI-compatible)',
+    ];
+
+    await waitFor(() => {
+      for (const name of expectedNames) {
+        expect(screen.getByText(name)).toBeInTheDocument();
+      }
+    });
+
+    // Verify document order by walking the DOM positions.
+    const rendered = expectedNames.map((name) => screen.getByText(name));
+    for (let i = 1; i < rendered.length; i += 1) {
+      const previous = rendered[i - 1];
+      const current = rendered[i];
+      const relation = previous.compareDocumentPosition(current);
+      expect(relation & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
+  it('configures Ollama through the OpenAI-compatible modal with the loopback default (US1 T013)', async () => {
+    const { saveApiKey } = await import('@/utils/keyring');
+
+    (invoke as ReturnType<typeof vi.fn>).mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === 'get_ai_settings') {
+        return Promise.resolve({ enabled: false, provider: '', model: '', hasApiKey: false });
+      }
+      if (cmd === 'get_ai_settings_for_provider') {
+        const provider = (args as { provider?: string })?.provider || '';
+        return Promise.resolve({ enabled: false, provider, model: '', hasApiKey: false });
+      }
+      if (cmd === 'get_enhancement_options') {
+        return Promise.resolve({ preset: 'Default', custom_vocabulary: [] });
+      }
+      if (cmd === 'get_openai_config') {
+        return Promise.resolve({ baseUrl: 'https://api.openai.com/v1' });
+      }
+      if (cmd === 'get_custom_prompts') {
+        return Promise.resolve({ base: null, prompts: null, email: null, commit: null });
+      }
+      if (cmd === 'get_default_prompts') {
+        return Promise.resolve({ base: '', prompts: '', email: '', commit: '' });
+      }
+      if (cmd === 'test_openai_endpoint') {
+        return Promise.resolve();
+      }
+      if (cmd === 'validate_and_cache_api_key') {
+        return Promise.resolve();
+      }
+      if (cmd === 'update_ai_settings') {
+        return Promise.resolve();
+      }
+      return Promise.resolve();
+    });
+
+    render(<EnhancementsSection />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Ollama')).toBeInTheDocument();
+    });
+
+    // Click the Ollama card's Configure button. There are two Configure buttons
+    // (Ollama + Custom); the Ollama card is rendered before Custom, so the first
+    // matches the Ollama row.
+    const configureButtons = screen.getAllByRole('button', { name: /configure/i });
+    expect(configureButtons.length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(configureButtons[0]);
+
+    // Modal opens with the Ollama loopback default URL pre-filled.
+    const baseUrlInput = (await screen.findByLabelText('API Base URL')) as HTMLInputElement;
+    expect(baseUrlInput.value).toBe('http://localhost:11434/v1');
+
+    // Type the model id and run the Test → Save flow.
+    fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'llama3.2:3b' } });
+    fireEvent.click(screen.getByText('Test'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Connection successful')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('validate_and_cache_api_key', {
+        args: {
+          provider: 'ollama',
+          apiKey: undefined,
+          baseUrl: 'http://localhost:11434/v1',
+          model: 'llama3.2:3b',
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('update_ai_settings', {
+        enabled: true,
+        provider: 'ollama',
+        model: 'llama3.2:3b',
+      });
+    });
+
+    // No bearer token was supplied → saveApiKey('ollama', …) must NOT be invoked.
+    expect(saveApiKey).not.toHaveBeenCalledWith('ollama', expect.anything());
+  });
+
+  it('shows a toast naming the configured Ollama URL when formatting fails (US2 T027)', async () => {
+    render(<EnhancementsSection />);
+
+    await waitFor(() => {
+      expect(screen.getByText('AI Providers')).toBeInTheDocument();
+    });
+
+    const failureMessage =
+      'AI formatting failed at http://localhost:11434/v1: network error: connection refused';
+    await emit('formatting-error', failureMessage);
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(failureMessage);
+    });
+  });
+
   it('persists custom prompt overrides on blur', async () => {
     render(<EnhancementsSection />);
 

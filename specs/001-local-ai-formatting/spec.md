@@ -27,6 +27,14 @@ component, and an `OpenAICompatConfigModal` for the Custom case.
 This feature **adds Ollama as a fifth peer in that list**, reusing
 all the abstractions above. It does NOT introduce a parallel codepath.
 
+## Clarifications
+
+### Session 2026-05-04
+
+- Q: FR-003 calls for a model dropdown populated from `/v1/models`, but AR-004 mandates reuse of the existing `OpenAICompatConfigModal` (free-text Input). How is this resolved? → A: Keep the shared modal's free-text Input for both Custom and Ollama. The existing Test action already probes `/v1/models` and verifies the chosen model exists, satisfying the validation intent of FR-003 / FR-009. The FR-003 wording about a "dropdown" is retired.
+- Q: Where does the Ollama card appear in the AI Providers list? → A: Slot it between Gemini and Custom — final order is OpenAI → Anthropic → Gemini → **Ollama** → Custom. Groups local/BYO-server providers together at the end, keeps the upstream cloud-trio ordering untouched (Constitution I rebase-friendly), and elevates Ollama above the more obscure Custom card.
+- Q: How does the UI disclose that "local" means "user-controlled host" when the URL isn't loopback? → A: Static helper text under the URL field in the Ollama config sheet, always shown: "Privacy depends on the host you control." No URL parsing, no dynamic detection — honest by default, minimal diff.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Format transcriptions with a local Ollama server (Priority: P1)
@@ -65,9 +73,11 @@ the OS network monitor: no outbound connection leaves loopback.
 2. **Given** the user clicks the Ollama card,
    **When** the configuration sheet opens,
    **Then** the endpoint URL is pre-filled with
-   `http://localhost:11434/v1`, no API key is required, and the
-   model dropdown is populated from the Ollama server's installed
-   models (or shows a clear message if the server is unreachable).
+   `http://localhost:11434/v1`, no API key is required, and the user
+   types the model id directly into a free-text Model field (the same
+   field used by the Custom (OpenAI-compatible) card). The **Test**
+   action validates that the chosen model is actually installed on
+   the configured endpoint by querying `/v1/models`.
 
 3. **Given** the user has selected a model and saved,
    **When** they make Ollama the active provider and dictate a
@@ -175,7 +185,10 @@ model is available, a specific error otherwise.
   LAN GPU box at `http://gpu-server:11434/v1`). The system MUST
   allow this but MUST NOT silently treat it as "local for privacy
   purposes" — privacy guarantees only hold when the user controls
-  the destination.
+  the destination. The Ollama config sheet MUST display static
+  helper text under the URL field — "Privacy depends on the host
+  you control." — so the disclosure is visible regardless of which
+  URL the user types.
 - The Ollama model returns an empty string. The system MUST treat
   this as a failed format and insert the raw transcription rather
   than an empty result. (Same behavior the existing OpenAI provider
@@ -236,19 +249,25 @@ model is available, a specific error otherwise.
 
 - **FR-001**: The Settings → Formatting screen MUST list **Ollama**
   as a fifth provider card, alongside OpenAI, Anthropic, Google
-  Gemini, and Custom (OpenAI-compatible). Selecting it opens a
-  configuration sheet pre-filled with sensible Ollama defaults.
+  Gemini, and Custom (OpenAI-compatible). The card MUST appear
+  between Google Gemini and Custom (final order: OpenAI →
+  Anthropic → Google Gemini → Ollama → Custom), grouping
+  local/BYO-server providers together at the end of the list.
+  Selecting the Ollama card opens a configuration sheet pre-filled
+  with sensible Ollama defaults.
 - **FR-002**: The Ollama configuration sheet MUST default the
   endpoint URL to `http://localhost:11434/v1` and the auth mode to
   "no auth," because Ollama by default exposes its OpenAI-compatible
   endpoint at that path with no API key. Both are user-overridable
   for advanced setups (LAN GPU box, reverse-proxied Ollama, etc.).
-- **FR-003**: The Ollama configuration sheet MUST populate the
-  model dropdown by querying the configured endpoint's
-  `/v1/models` (which Ollama exposes as part of its
-  OpenAI-compatible API). When the endpoint is unreachable, the
-  dropdown MUST display a clear empty state and allow the user to
-  enter a model name as free text.
+- **FR-003**: The Ollama configuration sheet MUST accept the model id
+  as free-text input (mirroring the Custom (OpenAI-compatible) card)
+  and MUST verify that the supplied model actually exists on the
+  configured endpoint via the **Test** action, which queries
+  `/v1/models` and reports a specific "model not found" error when
+  the model is missing or "server unreachable" when the daemon
+  cannot be contacted. The free-text input keeps the user unblocked
+  even when the endpoint is offline at configuration time.
 - **FR-004**: When Ollama is the active formatting provider, the
   system MUST send formatting requests only to the configured
   Ollama endpoint and MUST NOT make any request to OpenAI,

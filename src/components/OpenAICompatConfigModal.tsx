@@ -125,6 +125,9 @@ export function OpenAICompatConfigModal({
               <p className="text-xs text-muted-foreground">
                 Examples: https://api.openai.com/v1, http://localhost:11434/v1
               </p>
+              <p className="text-xs text-muted-foreground">
+                Privacy depends on the host you control.
+              </p>
             </div>
 
             <div className="grid gap-2">

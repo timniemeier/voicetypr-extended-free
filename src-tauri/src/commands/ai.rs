@@ -22,6 +22,9 @@ const CUSTOM_BASE_URL_KEY: &str = "ai_custom_base_url";
 const CUSTOM_NO_AUTH_KEY: &str = "ai_custom_no_auth";
 const LEGACY_OPENAI_BASE_URL_KEY: &str = "ai_openai_base_url";
 const LEGACY_OPENAI_NO_AUTH_KEY: &str = "ai_openai_no_auth";
+const DEFAULT_OLLAMA_BASE_URL: &str = "http://localhost:11434/v1";
+const OLLAMA_BASE_URL_KEY: &str = "ai_ollama_base_url";
+const OLLAMA_NO_AUTH_KEY: &str = "ai_ollama_no_auth";
 
 /// AI provider key names stored in the secure store
 const AI_PROVIDER_KEYS: &[&str] = &[
@@ -29,6 +32,7 @@ const AI_PROVIDER_KEYS: &[&str] = &[
     "ai_api_key_openai",
     "ai_api_key_anthropic",
     "ai_api_key_custom",
+    "ai_api_key_ollama",
 ];
 
 /// Populate the in-memory API key cache from the secure store.
@@ -73,6 +77,9 @@ fn check_has_api_key<R: tauri::Runtime>(
         let configured_base = store.get(CUSTOM_BASE_URL_KEY).is_some()
             || store.get(LEGACY_OPENAI_BASE_URL_KEY).is_some();
         configured_base || cache.contains_key(&format!("ai_api_key_{}", provider))
+    } else if provider == "ollama" {
+        let configured_base = store.get(OLLAMA_BASE_URL_KEY).is_some();
+        configured_base || cache.contains_key("ai_api_key_ollama")
     } else {
         cache.contains_key(&format!("ai_api_key_{}", provider))
     }
@@ -263,7 +270,7 @@ lazy_static::lazy_static! {
 }
 
 // Supported AI providers
-const ALLOWED_PROVIDERS: &[&str] = &["gemini", "openai", "anthropic", "custom"];
+const ALLOWED_PROVIDERS: &[&str] = &["gemini", "openai", "anthropic", "custom", "ollama"];
 
 fn validate_provider_name(provider: &str) -> Result<(), String> {
     // First check format
@@ -430,29 +437,28 @@ pub async fn validate_and_cache_api_key(
     validate_provider_name(&provider)?;
 
     let provided_key = api_key.clone().unwrap_or_default();
-    let inferred_no_auth = if provider == "custom" {
+    let inferred_no_auth = if provider == "custom" || provider == "ollama" {
         no_auth.unwrap_or(false) || provided_key.trim().is_empty()
     } else {
         false
     };
 
-    if provider == "openai" || provider == "custom" {
+    if provider == "openai" || provider == "custom" || provider == "ollama" {
         let store = app.store("settings").map_err(|e| e.to_string())?;
         if let Some(url) = base_url.clone() {
-            if provider == "custom" {
-                store.set(CUSTOM_BASE_URL_KEY, serde_json::Value::String(url));
-            } else {
-                store.set(LEGACY_OPENAI_BASE_URL_KEY, serde_json::Value::String(url));
-            }
+            let key = match provider.as_str() {
+                "custom" => CUSTOM_BASE_URL_KEY,
+                "ollama" => OLLAMA_BASE_URL_KEY,
+                _ => LEGACY_OPENAI_BASE_URL_KEY,
+            };
+            store.set(key, serde_json::Value::String(url));
         }
-        store.set(
-            if provider == "custom" {
-                CUSTOM_NO_AUTH_KEY
-            } else {
-                LEGACY_OPENAI_NO_AUTH_KEY
-            },
-            serde_json::Value::Bool(inferred_no_auth),
-        );
+        let no_auth_key = match provider.as_str() {
+            "custom" => CUSTOM_NO_AUTH_KEY,
+            "ollama" => OLLAMA_NO_AUTH_KEY,
+            _ => LEGACY_OPENAI_NO_AUTH_KEY,
+        };
+        store.set(no_auth_key, serde_json::Value::Bool(inferred_no_auth));
         if let Some(m) = model.clone() {
             store.set("ai_model", serde_json::Value::String(m));
         }
@@ -461,30 +467,33 @@ pub async fn validate_and_cache_api_key(
             .map_err(|e| format!("Failed to save AI settings: {}", e))?;
     }
 
-    if provider == "openai" || provider == "custom" {
+    if provider == "openai" || provider == "custom" || provider == "ollama" {
         let store = app.store("settings").map_err(|e| e.to_string())?;
 
         let base = base_url
             .clone()
-            .or_else(|| {
-                if provider == "custom" {
-                    store
-                        .get(CUSTOM_BASE_URL_KEY)
-                        .and_then(|v| v.as_str().map(|s| s.to_string()))
-                        .or_else(|| {
-                            store
-                                .get(LEGACY_OPENAI_BASE_URL_KEY)
-                                .and_then(|v| v.as_str().map(|s| s.to_string()))
-                        })
-                } else {
-                    store
-                        .get(LEGACY_OPENAI_BASE_URL_KEY)
-                        .and_then(|v| v.as_str().map(|s| s.to_string()))
-                }
+            .or_else(|| match provider.as_str() {
+                "custom" => store
+                    .get(CUSTOM_BASE_URL_KEY)
+                    .and_then(|v| v.as_str().map(|s| s.to_string()))
+                    .or_else(|| {
+                        store
+                            .get(LEGACY_OPENAI_BASE_URL_KEY)
+                            .and_then(|v| v.as_str().map(|s| s.to_string()))
+                    }),
+                "ollama" => store
+                    .get(OLLAMA_BASE_URL_KEY)
+                    .and_then(|v| v.as_str().map(|s| s.to_string())),
+                _ => store
+                    .get(LEGACY_OPENAI_BASE_URL_KEY)
+                    .and_then(|v| v.as_str().map(|s| s.to_string())),
             })
-            .unwrap_or_else(|| DEFAULT_OPENAI_BASE_URL.to_string());
+            .unwrap_or_else(|| match provider.as_str() {
+                "ollama" => DEFAULT_OLLAMA_BASE_URL.to_string(),
+                _ => DEFAULT_OPENAI_BASE_URL.to_string(),
+            });
         let validate_model = model.clone().unwrap_or_else(|| "gpt-5-nano".to_string());
-        let allow_chat_probe_fallback = provider == "custom";
+        let allow_chat_probe_fallback = provider == "custom" || provider == "ollama";
 
         let client = reqwest::Client::new();
         let auth_header = if inferred_no_auth {
@@ -633,6 +642,23 @@ pub async fn update_ai_settings(
             };
             let configured_base = store.get(CUSTOM_BASE_URL_KEY).is_some()
                 || store.get(LEGACY_OPENAI_BASE_URL_KEY).is_some();
+
+            if !(cache_has_key || configured_base) {
+                log::warn!(
+                    "Attempted to enable AI enhancement without cached API key or configured base URL for provider: {}",
+                    provider
+                );
+                return Err("API key not found. Please add an API key first.".to_string());
+            }
+        } else if provider == "ollama" {
+            let store = app.store("settings").map_err(|e| e.to_string())?;
+            let cache_has_key = {
+                let cache = API_KEY_CACHE
+                    .lock()
+                    .map_err(|_| "Failed to access cache".to_string())?;
+                cache.contains_key("ai_api_key_ollama")
+            };
+            let configured_base = store.get(OLLAMA_BASE_URL_KEY).is_some();
 
             if !(cache_has_key || configured_base) {
                 log::warn!(
@@ -912,6 +938,33 @@ pub async fn enhance_transcription(text: String, app: tauri::AppHandle) -> Resul
         opts.insert("no_auth".into(), serde_json::Value::Bool(cached.is_none()));
 
         ("openai".to_string(), cached.unwrap_or_default(), opts)
+    } else if provider == "ollama" {
+        let base_url = store
+            .get(OLLAMA_BASE_URL_KEY)
+            .and_then(|v| v.as_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| DEFAULT_OLLAMA_BASE_URL.to_string());
+
+        let stored_no_auth = store
+            .get(OLLAMA_NO_AUTH_KEY)
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+
+        let cache = API_KEY_CACHE.lock().map_err(|e| {
+            log::error!("Failed to access API key cache: {}", e);
+            "Failed to access cache".to_string()
+        })?;
+
+        let cached = cache.get("ai_api_key_ollama").cloned();
+        drop(cache);
+
+        let mut opts = std::collections::HashMap::new();
+        opts.insert("base_url".into(), serde_json::Value::String(base_url));
+        opts.insert(
+            "no_auth".into(),
+            serde_json::Value::Bool(stored_no_auth || cached.is_none()),
+        );
+
+        ("ollama".to_string(), cached.unwrap_or_default(), opts)
     } else if provider == "gemini" || provider == "anthropic" {
         // Both providers read the key from the in-memory cache and skip the
         // OpenAI-style probe at save time; first-use surfaces auth/model errors.
@@ -967,6 +1020,13 @@ pub async fn enhance_transcription(text: String, app: tauri::AppHandle) -> Resul
         options,
     };
 
+    let configured_base_url = config
+        .options
+        .get("base_url")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let provider_name_for_log = config.provider.clone();
+
     // Create provider and enhance text
     let provider = AIProviderFactory::create(&config)
         .map_err(|e| format!("Failed to create AI provider: {}", e))?;
@@ -989,10 +1049,26 @@ pub async fn enhance_transcription(text: String, app: tauri::AppHandle) -> Resul
             Ok(response.enhanced_text)
         }
         Err(e) => {
-            log::error!("AI formatting failed: {}", e);
+            match configured_base_url.as_deref() {
+                Some(url) => log::error!(
+                    "AI formatting failed (provider={}, base_url={}): {}",
+                    provider_name_for_log,
+                    url,
+                    e
+                ),
+                None => log::error!(
+                    "AI formatting failed (provider={}): {}",
+                    provider_name_for_log,
+                    e
+                ),
+            }
             // Emit formatting error via pill toast
             pill_toast(&app, "Formatting failed", 1500);
-            Err(format!("AI formatting failed: {}", e))
+            let user_message = match configured_base_url {
+                Some(url) => format!("AI formatting failed at {}: {}", url, e),
+                None => format!("AI formatting failed: {}", e),
+            };
+            Err(user_message)
         }
     }
 }
@@ -1154,6 +1230,7 @@ mod tests {
         assert!(validate_provider_name("openai").is_ok());
         assert!(validate_provider_name("anthropic").is_ok());
         assert!(validate_provider_name("custom").is_ok());
+        assert!(validate_provider_name("ollama").is_ok());
 
         // Groq is no longer supported
         assert!(validate_provider_name("groq").is_err());
@@ -1196,6 +1273,8 @@ mod tests {
         // unknown) get a model-listing error.
         let custom_models = get_curated_models("custom");
         assert!(custom_models.is_empty());
+        let ollama_models = get_curated_models("ollama");
+        assert!(ollama_models.is_empty());
         let unknown_models = get_curated_models("unknown");
         assert!(unknown_models.is_empty());
     }

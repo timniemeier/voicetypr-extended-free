@@ -113,6 +113,69 @@ describe("OpenAICompatConfigModal", () => {
     await waitFor(() => expect(screen.getByText("Save")).not.toBeDisabled());
   });
 
+  it("renders with the Ollama loopback default and shows the privacy helper text", () => {
+    render(
+      <OpenAICompatConfigModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSubmit={mockOnSubmit}
+        defaultBaseUrl="http://localhost:11434/v1"
+      />
+    );
+
+    expect(screen.getByLabelText("API Base URL")).toHaveValue("http://localhost:11434/v1");
+    expect(
+      screen.getByText("Privacy depends on the host you control.")
+    ).toBeInTheDocument();
+  });
+
+  it("Test passes for Ollama defaults and enables Save (US3)", async () => {
+    const user = userEvent.setup();
+    const { invoke } = await import("@tauri-apps/api/core");
+    const invokeMock = invoke as unknown as Mock;
+    invokeMock.mockResolvedValueOnce(undefined);
+
+    render(
+      <OpenAICompatConfigModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSubmit={mockOnSubmit}
+        defaultBaseUrl="http://localhost:11434/v1"
+      />
+    );
+
+    await user.type(screen.getByLabelText("Model ID"), "llama3.2:3b");
+    fireEvent.click(screen.getByText("Test"));
+    await waitFor(() => {
+      expect(screen.getByText("Connection successful")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Save")).not.toBeDisabled();
+  });
+
+  it("Test surfaces the model-not-found error and keeps Save disabled (US3)", async () => {
+    const user = userEvent.setup();
+    const { invoke } = await import("@tauri-apps/api/core");
+    const invokeMock = invoke as unknown as Mock;
+    const failureMessage = "Model 'llama3.2:3b' not found in endpoint model list";
+    invokeMock.mockRejectedValueOnce(failureMessage);
+
+    render(
+      <OpenAICompatConfigModal
+        isOpen={true}
+        onClose={mockOnClose}
+        onSubmit={mockOnSubmit}
+        defaultBaseUrl="http://localhost:11434/v1"
+      />
+    );
+
+    await user.type(screen.getByLabelText("Model ID"), "llama3.2:3b");
+    fireEvent.click(screen.getByText("Test"));
+    await waitFor(() => {
+      expect(screen.getByText(failureMessage)).toBeInTheDocument();
+    });
+    expect(screen.getByText("Save")).toBeDisabled();
+  });
+
   it("updates the form values when the props change", () => {
     const { rerender } = render(
       <OpenAICompatConfigModal
