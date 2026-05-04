@@ -23,7 +23,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
-import { ChevronDown, Info } from "lucide-react";
+import { ChevronDown, FileText, GitCommit, Info, Mail, Sparkles } from "lucide-react";
 
 interface AISettings {
   enabled: boolean;
@@ -74,6 +74,9 @@ export function EnhancementsSection() {
   const [defaultPrompts, setDefaultPrompts] = useState<CustomPrompts>(EMPTY_CUSTOM_PROMPTS);
   const [customPromptsLoaded, setCustomPromptsLoaded] = useState(false);
   const [customPromptsOpen, setCustomPromptsOpen] = useState(false);
+  // Which prompt field is currently displayed for editing. Independent from the
+  // runtime preset selector in Formatting Options.
+  const [editingPrompt, setEditingPrompt] = useState<keyof CustomPrompts>('base');
   // Local textarea drafts so typing stays smooth and we only persist on blur.
   const [promptDrafts, setPromptDrafts] = useState<Record<keyof CustomPrompts, string>>({
     base: '',
@@ -152,39 +155,58 @@ export function EnhancementsSection() {
     void persistCustomPrompts(next);
   };
 
+  // Switching tabs flushes any pending blur so unsaved edits to the outgoing
+  // tab's textarea aren't lost when it unmounts.
+  const handleEditingPromptChange = (next: keyof CustomPrompts) => {
+    if (next === editingPrompt) return;
+    if (editedFieldsRef.current[editingPrompt]) {
+      handlePromptBlur(editingPrompt);
+    }
+    setEditingPrompt(next);
+  };
+
   const customPromptFields: Array<{
     key: keyof CustomPrompts;
     label: string;
+    icon: typeof FileText;
     description: string;
     rows: number;
     hint?: string;
   }> = [
     {
       key: 'base',
-      label: 'Base Prompt',
-      description: 'Applied to every preset. Cleans up the transcript before any further transformation.',
+      label: 'Base',
+      icon: FileText,
+      description: 'Always-applied post-processor; cleans grammar, fillers, capitalization.',
       rows: 12,
       hint: 'Use {language} where you want the output language inserted.',
     },
     {
       key: 'prompts',
-      label: 'Prompts Preset',
-      description: 'Appended to the base prompt when the "Prompts" preset is selected.',
+      label: 'Prompts',
+      icon: Sparkles,
+      description: 'Layered on top of Base when the Prompts preset is active.',
       rows: 8,
     },
     {
       key: 'email',
-      label: 'Email Preset',
-      description: 'Appended to the base prompt when the "Email" preset is selected.',
+      label: 'Email',
+      icon: Mail,
+      description: 'Layered on top of Base when the Email preset is active.',
       rows: 8,
     },
     {
       key: 'commit',
-      label: 'Commit Preset',
-      description: 'Appended to the base prompt when the "Commit" preset is selected.',
+      label: 'Commit',
+      icon: GitCommit,
+      description: 'Layered on top of Base when the Commit preset is active.',
       rows: 6,
     },
   ];
+
+  const activePromptField =
+    customPromptFields.find((f) => f.key === editingPrompt) ?? customPromptFields[0];
+  const isActiveOverridden = customPrompts[activePromptField.key] !== null;
 
   const loadEnhancementOptions = async () => {
     try {
@@ -611,58 +633,87 @@ export function EnhancementsSection() {
                   Loading prompts...
                 </div>
               ) : (
-              customPromptFields.map((field) => {
-                const isOverridden = customPrompts[field.key] !== null;
-                return (
-                  <div key={field.key} className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <Label
-                          htmlFor={`custom-prompt-${field.key}`}
-                          className="text-sm font-medium"
+                <div className="space-y-3">
+                  {/* Tab pill selector — matches the Formatting Options visual style. */}
+                  <div className="flex flex-wrap gap-2">
+                    {customPromptFields.map((field) => {
+                      const Icon = field.icon;
+                      const isSelected = editingPrompt === field.key;
+                      const isOverridden = customPrompts[field.key] !== null;
+                      return (
+                        <Button
+                          key={field.key}
+                          type="button"
+                          variant={isSelected ? "default" : "outline"}
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => handleEditingPromptChange(field.key)}
+                          data-testid={`custom-prompt-tab-${field.key}`}
                         >
+                          <Icon className="h-4 w-4" />
                           {field.label}
                           {isOverridden && (
-                            <span className="ml-2 text-xs text-amber-600 dark:text-amber-500 font-normal">
+                            <span className="ml-1 text-xs text-amber-600 dark:text-amber-500 font-normal">
                               (custom)
                             </span>
                           )}
-                        </Label>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {field.description}
-                        </p>
-                      </div>
+                        </Button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Active tab description */}
+                  <p className="text-sm text-muted-foreground">
+                    {activePromptField.description}
+                  </p>
+
+                  {/* Single textarea for the active tab */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label
+                        htmlFor={`custom-prompt-${activePromptField.key}`}
+                        className="text-sm font-medium"
+                      >
+                        {activePromptField.label} Prompt
+                        {isActiveOverridden && (
+                          <span className="ml-2 text-xs text-amber-600 dark:text-amber-500 font-normal">
+                            (custom)
+                          </span>
+                        )}
+                      </Label>
                       <Button
                         type="button"
                         size="sm"
                         variant="ghost"
-                        onClick={() => handleResetPrompt(field.key)}
-                        disabled={!isOverridden}
-                        data-testid={`reset-prompt-${field.key}`}
+                        onClick={() => handleResetPrompt(activePromptField.key)}
+                        disabled={!isActiveOverridden}
+                        data-testid={`reset-prompt-${activePromptField.key}`}
                       >
                         Reset to default
                       </Button>
                     </div>
                     <Textarea
-                      id={`custom-prompt-${field.key}`}
-                      data-testid={`custom-prompt-${field.key}`}
-                      rows={field.rows}
+                      id={`custom-prompt-${activePromptField.key}`}
+                      data-testid={`custom-prompt-${activePromptField.key}`}
+                      rows={activePromptField.rows}
                       maxLength={MAX_CUSTOM_PROMPT_LEN}
-                      value={promptDrafts[field.key]}
+                      value={promptDrafts[activePromptField.key]}
                       onChange={(e) => {
-                        editedFieldsRef.current[field.key] = true;
+                        editedFieldsRef.current[activePromptField.key] = true;
                         const value = e.target.value;
-                        setPromptDrafts((prev) => ({ ...prev, [field.key]: value }));
+                        setPromptDrafts((prev) => ({
+                          ...prev,
+                          [activePromptField.key]: value,
+                        }));
                       }}
-                      onBlur={() => handlePromptBlur(field.key)}
+                      onBlur={() => handlePromptBlur(activePromptField.key)}
                       className="font-mono text-xs"
                     />
-                    {field.hint && (
-                      <p className="text-xs text-muted-foreground">{field.hint}</p>
+                    {editingPrompt === 'base' && activePromptField.hint && (
+                      <p className="text-xs text-muted-foreground">{activePromptField.hint}</p>
                     )}
                   </div>
-                );
-              })
+                </div>
               )}
             </CollapsibleContent>
           </Collapsible>
