@@ -198,8 +198,7 @@ export function buildReportBody(data: ManualReportData): string {
   return parts.join('\n');
 }
 
-const BUG_REPORT_ENDPOINT =
-  import.meta.env.VITE_BUG_REPORT_ENDPOINT || 'https://voicetypr.com/api/v1/bug-reports';
+const BUG_REPORT_ENDPOINT = import.meta.env.VITE_BUG_REPORT_ENDPOINT ?? '';
 
 interface ReportEnvironmentPayload {
   appVersion: string;
