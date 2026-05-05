@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use crate::commands::settings::{get_supported_languages, Settings};
+    use crate::commands::settings::{
+        get_supported_languages, normalize_overlay_and_languages, Settings,
+    };
     use serde_json::json;
 
     #[test]
@@ -44,6 +46,12 @@ mod tests {
             pill_indicator_offset: 10,
             pause_media_during_recording: true,
             auto_paste_transcription: true,
+            enabled_languages: vec!["es".to_string()],
+            cycle_preset_hotkey: None,
+            cycle_language_hotkey: None,
+            pill_show_preset: false,
+            pill_show_language: false,
+            pill_extras_layout: "right".to_string(),
         };
 
         // Test serialization
@@ -113,6 +121,12 @@ mod tests {
             pill_indicator_offset: 25,
             pause_media_during_recording: true,
             auto_paste_transcription: true,
+            enabled_languages: vec!["fr".to_string(), "en".to_string()],
+            cycle_preset_hotkey: Some("CommandOrControl+Shift+P".to_string()),
+            cycle_language_hotkey: Some("CommandOrControl+Shift+L".to_string()),
+            pill_show_preset: true,
+            pill_show_language: true,
+            pill_extras_layout: "below".to_string(),
         };
 
         let cloned = settings.clone();
@@ -228,6 +242,119 @@ mod tests {
         let normal_hotkey = "CommandOrControl+Shift+Alt+A";
         assert!(!normal_hotkey.is_empty());
         assert!(normal_hotkey.len() <= 100);
+    }
+
+    // ----- T006: serde round-trip tests for the new fields -------------------
+
+    #[test]
+    fn test_settings_default_new_fields() {
+        let settings = Settings::default();
+
+        assert_eq!(settings.enabled_languages, vec!["en".to_string()]);
+        assert_eq!(settings.cycle_preset_hotkey, None);
+        assert_eq!(settings.cycle_language_hotkey, None);
+        assert_eq!(settings.pill_show_preset, false);
+        assert_eq!(settings.pill_show_language, false);
+        assert_eq!(settings.pill_extras_layout, "right");
+    }
+
+    #[test]
+    fn test_settings_default_serialises_with_new_field_defaults() {
+        let settings = Settings::default();
+        let value = serde_json::to_value(&settings).unwrap();
+
+        assert_eq!(value["enabled_languages"], json!(["en"]));
+        assert_eq!(value["cycle_preset_hotkey"], serde_json::Value::Null);
+        assert_eq!(value["cycle_language_hotkey"], serde_json::Value::Null);
+        assert_eq!(value["pill_show_preset"], json!(false));
+        assert_eq!(value["pill_show_language"], json!(false));
+        assert_eq!(value["pill_extras_layout"], json!("right"));
+    }
+
+    #[test]
+    fn test_settings_round_trip_preserves_multi_language() {
+        let mut settings = Settings::default();
+        settings.enabled_languages = vec!["en".to_string(), "de".to_string()];
+        settings.language = "de".to_string();
+        settings.cycle_preset_hotkey = Some("CommandOrControl+Shift+P".to_string());
+        settings.cycle_language_hotkey = Some("CommandOrControl+Shift+L".to_string());
+        settings.pill_show_preset = true;
+        settings.pill_show_language = true;
+        settings.pill_extras_layout = "below".to_string();
+
+        let json = serde_json::to_string(&settings).unwrap();
+        let decoded: Settings = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded.enabled_languages, vec!["en", "de"]);
+        assert_eq!(decoded.language, "de");
+        assert_eq!(
+            decoded.cycle_preset_hotkey,
+            Some("CommandOrControl+Shift+P".to_string())
+        );
+        assert_eq!(
+            decoded.cycle_language_hotkey,
+            Some("CommandOrControl+Shift+L".to_string())
+        );
+        assert_eq!(decoded.pill_show_preset, true);
+        assert_eq!(decoded.pill_show_language, true);
+        assert_eq!(decoded.pill_extras_layout, "below");
+
+        // Round-trip through JSON should preserve the byte-for-byte payload.
+        let re_encoded = serde_json::to_string(&decoded).unwrap();
+        assert_eq!(json, re_encoded);
+    }
+
+    // ----- T007: validation tests for save_settings normalisation -----------
+
+    #[test]
+    fn test_normalize_resets_empty_enabled_languages_to_en() {
+        let mut settings = Settings::default();
+        settings.enabled_languages = vec![];
+        // language remains "en" from default; with empty enabled set, we should
+        // reset to ["en"] and keep the active language as "en".
+        normalize_overlay_and_languages(&mut settings);
+
+        assert_eq!(settings.enabled_languages, vec!["en".to_string()]);
+        assert_eq!(settings.language, "en");
+    }
+
+    #[test]
+    fn test_normalize_resets_language_when_not_in_enabled_set() {
+        let mut settings = Settings::default();
+        settings.enabled_languages = vec!["en".to_string(), "de".to_string()];
+        settings.language = "fr".to_string();
+        normalize_overlay_and_languages(&mut settings);
+
+        assert_eq!(settings.language, "en");
+        assert_eq!(settings.enabled_languages, vec!["en", "de"]);
+    }
+
+    #[test]
+    fn test_normalize_keeps_valid_active_language() {
+        let mut settings = Settings::default();
+        settings.enabled_languages = vec!["en".to_string(), "de".to_string()];
+        settings.language = "de".to_string();
+        normalize_overlay_and_languages(&mut settings);
+
+        assert_eq!(settings.language, "de");
+    }
+
+    #[test]
+    fn test_normalize_coerces_unknown_pill_extras_layout_to_right() {
+        let mut settings = Settings::default();
+        settings.pill_extras_layout = "diagonal".to_string();
+        normalize_overlay_and_languages(&mut settings);
+
+        assert_eq!(settings.pill_extras_layout, "right");
+    }
+
+    #[test]
+    fn test_normalize_keeps_below_layout() {
+        let mut settings = Settings::default();
+        settings.pill_extras_layout = "below".to_string();
+        normalize_overlay_and_languages(&mut settings);
+
+        assert_eq!(settings.pill_extras_layout, "below");
     }
 
     #[tokio::test]

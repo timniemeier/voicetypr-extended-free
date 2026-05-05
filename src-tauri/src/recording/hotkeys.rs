@@ -1,10 +1,13 @@
 use crate::commands::audio::{
     start_recording, stop_recording, RecorderState, PTT_START_ABORTED_AFTER_RELEASE,
 };
+use crate::recording::cycle_actions::{
+    next_language, next_preset, preset_label, LanguageCycleOutcome,
+};
 use crate::recording::escape_handler::handle_escape_key_press;
 use crate::{get_recording_state, update_recording_state, AppState, RecordingMode, RecordingState};
 use std::sync::atomic::Ordering;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::{Shortcut, ShortcutState};
 
 /// Handle global shortcut events for recording
@@ -59,6 +62,30 @@ pub fn handle_global_shortcut(
         }
     };
 
+    let is_cycle_preset_shortcut = {
+        if let Ok(guard) = app_state.cycle_preset_shortcut.lock() {
+            if let Some(ref cycle_shortcut) = *guard {
+                shortcut == cycle_shortcut
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    };
+
+    let is_cycle_language_shortcut = {
+        if let Ok(guard) = app_state.cycle_language_shortcut.lock() {
+            if let Some(ref cycle_shortcut) = *guard {
+                shortcut == cycle_shortcut
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    };
+
     let should_handle = match recording_mode {
         RecordingMode::Toggle => is_recording_shortcut && event_state == ShortcutState::Pressed,
         RecordingMode::PushToTalk => is_recording_shortcut || is_ptt_shortcut,
@@ -67,9 +94,139 @@ pub fn handle_global_shortcut(
     if should_handle {
         let current_state = get_recording_state(app);
         handle_recording_shortcut(app, &app_state, recording_mode, current_state, event_state);
+    } else if is_cycle_preset_shortcut {
+        // Cycle the active formatting preset on key press only (ignore release).
+        if event_state == ShortcutState::Pressed {
+            handle_cycle_preset_shortcut(app);
+        }
+    } else if is_cycle_language_shortcut {
+        // Cycle the active spoken language on key press only.
+        if event_state == ShortcutState::Pressed {
+            handle_cycle_language_shortcut(app);
+        }
     } else if !is_recording_shortcut && !is_ptt_shortcut {
         handle_non_recording_shortcut(app, shortcut, event_state);
     }
+}
+
+/// Cycle the active formatting preset forward one step and emit
+/// `active-preset-changed { preset }` so the overlay (and the Enhancements UI)
+/// can stay in sync. Reuses the existing `get_enhancement_options` /
+/// `update_enhancement_options` code path so there is one source of truth.
+fn handle_cycle_preset_shortcut(app: &tauri::AppHandle) {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let current = match crate::commands::ai::get_enhancement_options(app_handle.clone()).await {
+            Ok(options) => options,
+            Err(e) => {
+                log::warn!("cycle-preset: failed to read enhancement options: {}", e);
+                return;
+            }
+        };
+
+        let next = crate::ai::prompts::EnhancementOptions {
+            preset: next_preset(&current.preset),
+        };
+        let label = preset_label(&next.preset).to_string();
+
+        if let Err(e) =
+            crate::commands::ai::update_enhancement_options(next, app_handle.clone()).await
+        {
+            log::warn!("cycle-preset: failed to persist next preset: {}", e);
+            return;
+        }
+
+        if let Err(e) = app_handle.emit(
+            "active-preset-changed",
+            serde_json::json!({ "preset": label }),
+        ) {
+            log::warn!("cycle-preset: failed to emit active-preset-changed: {}", e);
+        } else {
+            log::info!("cycle-preset: advanced to {}", label);
+        }
+    });
+}
+
+/// Cycle the active spoken language forward one step (per spec 002 — US2).
+///
+/// Reads the persisted `Settings` (active language, enabled set, model),
+/// applies the gate logic from [`next_language`], and:
+///   * On `SingleLanguageNoop` / `EnglishOnlyModelNoop`: emits
+///     `cycle-language-noop { reason: ... }` and stops. `Settings.language`
+///     is NOT mutated (per FR-011 + SC-005).
+///   * On `Advanced(next)`: persists `Settings.language = next` via the
+///     existing `save_settings` flow and emits `active-language-changed
+///     { language: next }`.
+fn handle_cycle_language_shortcut(app: &tauri::AppHandle) {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let settings = match crate::commands::settings::get_settings(app_handle.clone()).await {
+            Ok(s) => s,
+            Err(e) => {
+                log::warn!("cycle-language: failed to read settings: {}", e);
+                return;
+            }
+        };
+
+        let outcome = next_language(
+            &settings.enabled_languages,
+            &settings.language,
+            &settings.current_model_engine,
+            &settings.current_model,
+        );
+
+        match outcome {
+            LanguageCycleOutcome::SingleLanguageNoop => {
+                if let Err(e) = app_handle.emit(
+                    "cycle-language-noop",
+                    serde_json::json!({ "reason": "single_language" }),
+                ) {
+                    log::warn!(
+                        "cycle-language: failed to emit single-language noop: {}",
+                        e
+                    );
+                } else {
+                    log::info!("cycle-language: noop (single_language)");
+                }
+            }
+            LanguageCycleOutcome::EnglishOnlyModelNoop => {
+                if let Err(e) = app_handle.emit(
+                    "cycle-language-noop",
+                    serde_json::json!({ "reason": "english_only_model" }),
+                ) {
+                    log::warn!(
+                        "cycle-language: failed to emit english-only noop: {}",
+                        e
+                    );
+                } else {
+                    log::info!("cycle-language: noop (english_only_model)");
+                }
+            }
+            LanguageCycleOutcome::Advanced(next) => {
+                let mut updated = settings;
+                updated.language = next.clone();
+
+                if let Err(e) =
+                    crate::commands::settings::save_settings(app_handle.clone(), updated).await
+                {
+                    log::warn!("cycle-language: failed to persist next language: {}", e);
+                    return;
+                }
+
+                if let Err(e) = app_handle.emit(
+                    "active-language-changed",
+                    serde_json::json!({ "language": next }),
+                ) {
+                    log::warn!(
+                        "cycle-language: failed to emit active-language-changed: {}",
+                        e
+                    );
+                } else {
+                    log::info!("cycle-language: advanced to {}", next);
+                }
+            }
+        }
+    });
 }
 
 /// Handle recording-related shortcuts (toggle or PTT)

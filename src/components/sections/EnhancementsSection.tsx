@@ -379,8 +379,27 @@ export function EnhancementsSection() {
       toast.error(typeof msg === 'string' ? msg : 'Formatting failed');
     });
 
+    // Spec 002 — US1: the global cycle-preset hotkey writes to the same `ai`
+    // store this UI reads from, so we re-sync local state whenever the cycle
+    // event fires. Both surfaces stay in lockstep (FR-001).
+    const unlistenPresetChanged = listen<{ preset: 'Default' | 'Prompts' | 'Email' | 'Commit' }>(
+      'active-preset-changed',
+      (event) => {
+        const next = event.payload?.preset;
+        if (next) {
+          setEnhancementOptions((prev) => ({ ...prev, preset: next }));
+        }
+      }
+    );
+
     return () => {
-      Promise.all([unlistenReady, unlistenApiKey, unlistenApiKeyRemoved, unlistenFormattingError]).then(fns => {
+      Promise.all([
+        unlistenReady,
+        unlistenApiKey,
+        unlistenApiKeyRemoved,
+        unlistenFormattingError,
+        unlistenPresetChanged,
+      ]).then(fns => {
         fns.forEach(fn => fn());
       });
     };

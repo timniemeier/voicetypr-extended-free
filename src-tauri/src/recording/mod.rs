@@ -1,3 +1,4 @@
+pub mod cycle_actions;
 pub mod escape_handler;
 mod hotkeys;
 

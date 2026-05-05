@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSettings } from "@/contexts/SettingsContext";
 import { getCloudProviderByModel } from "@/lib/cloudProviders";
 import { cn } from "@/lib/utils";
-import { ModelInfo, isCloudModel, isLocalModel } from "@/types";
+import { AppSettings, ModelInfo, isCloudModel, isLocalModel } from "@/types";
 import { Bot, CheckCircle, Download, HardDrive, Star, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -81,6 +81,14 @@ export function ModelsSection({
     | "soniox";
   const currentModelName = settings?.current_model ?? "";
   const languageValue = settings?.language ?? "en";
+  const enabledLanguages = useMemo<string[]>(
+    () =>
+      Array.isArray(settings?.enabled_languages) &&
+      settings!.enabled_languages!.length > 0
+        ? settings!.enabled_languages!
+        : [languageValue],
+    [settings, languageValue],
+  );
 
   const isEnglishOnlyModel = useMemo(() => {
     if (!settings) return false;
@@ -93,6 +101,10 @@ export function ModelsSection({
     return false;
   }, [currentEngine, currentModelName, settings]);
 
+  // Active language change. The active language must always be a member of
+  // `enabled_languages`; if the user marks an entry active that wasn't yet
+  // enabled, `LanguageSelection` already enables it via `onEnabledChange`
+  // first, so we only persist `language` here.
   const handleLanguageChange = useCallback(
     async (value: string) => {
       try {
@@ -103,6 +115,40 @@ export function ModelsSection({
       }
     },
     [updateSettings],
+  );
+
+  // Enabled-set change (multi-select add / remove). Per FR-010:
+  //   - empty set is normalised to `["en"]` and the active language is
+  //     forced to `"en"`;
+  //   - removing the currently-active language falls back to the first
+  //     remaining entry.
+  const handleEnabledLanguagesChange = useCallback(
+    async (next: string[]) => {
+      const previousActive = settings?.language ?? "en";
+      let normalisedNext = next;
+      let normalisedActive = previousActive;
+
+      if (normalisedNext.length === 0) {
+        normalisedNext = ["en"];
+        normalisedActive = "en";
+      } else if (!normalisedNext.includes(previousActive)) {
+        normalisedActive = normalisedNext[0];
+      }
+
+      try {
+        const updates: Partial<AppSettings> = {
+          enabled_languages: normalisedNext,
+        };
+        if (normalisedActive !== previousActive) {
+          updates.language = normalisedActive;
+        }
+        await updateSettings(updates);
+      } catch (error) {
+        console.error("Failed to update enabled languages:", error);
+        toast.error("Failed to update enabled languages");
+      }
+    },
+    [settings, updateSettings],
   );
 
   const activeModelLabel = useMemo(() => {
@@ -323,8 +369,12 @@ export function ModelsSection({
             value={languageValue}
             engine={currentEngine}
             englishOnly={isEnglishOnlyModel}
+            enabledLanguages={enabledLanguages}
             onValueChange={(value) => {
               void handleLanguageChange(value);
+            }}
+            onEnabledChange={(next) => {
+              void handleEnabledLanguagesChange(next);
             }}
           />
         </div>

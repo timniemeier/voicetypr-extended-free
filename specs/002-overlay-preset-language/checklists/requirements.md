@@ -40,14 +40,8 @@
   (which references `AIProviderFactory::create`, `OpenAIProvider`,
   etc.). If a stricter reviewer prefers zero file paths in the spec,
   these can be moved to the plan without changing requirements.
-- The two assumptions worth re-checking with the user before
-  implementation:
-  1. **Two hotkeys vs one** — spec assumes two separate cycle hotkeys
-     (one per axis). If the user wants a single hotkey that cycles a
-     combined state, the cycle order in FR-002 / FR-005 needs
-     redesigning.
-  2. **Multi-select replaces single-select** in Models → Spoken
-     Language. Spec assumes the existing single-language picker is
-     extended to a multi-select with an "active" indicator. If the
-     user wants to keep the single picker and add a second "additional
-     languages" list elsewhere, FR-003 / Models UI shape changes.
+- All 4 clarification questions from the 2026-05-04 session are
+  resolved in `spec.md` § Clarifications: two separate hotkeys
+  (Q1=B), multi-select replaces single-select (Q2=A), English-only
+  model → cycle hotkey is a no-op + toast (Q3=B), label order is
+  `[lang] · [preset]` (Q4=A).

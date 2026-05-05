@@ -13,8 +13,9 @@ import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useCanAutoInsert } from "@/contexts/ReadinessContext";
 import { useSettings } from "@/contexts/SettingsContext";
+import { findUserHotkeyConflict } from "@/lib/hotkey-conflicts";
 import { isMacOS } from "@/lib/platform";
-import { PillIndicatorMode, PillIndicatorPosition } from "@/types";
+import { PillExtrasLayout, PillIndicatorMode, PillIndicatorPosition } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import {
   AlertCircle,
@@ -255,6 +256,96 @@ export function GeneralSettings() {
                   )}
                 </>
               )} */}
+
+              {/* Cycle-preset hotkey (spec 002 — US1). Optional binding; an
+                  empty string means unbound, in which case the cycle is a
+                  no-op. Validated against the recording / PTT / cycle-language
+                  bindings via `findUserHotkeyConflict` (FR-012). */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="cycle-preset-hotkey"
+                    className="text-sm font-medium"
+                  >
+                    Cycle preset hotkey
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Cycle Default → Prompts → Email → Commit
+                  </p>
+                </div>
+                <HotkeyInput
+                  value={settings.cycle_preset_hotkey || ""}
+                  onChange={async (hotkey) => {
+                    const conflict = findUserHotkeyConflict(hotkey, {
+                      "recording hotkey": settings.hotkey,
+                      "push-to-talk hotkey": settings.ptt_hotkey,
+                      "cycle language hotkey": settings.cycle_language_hotkey,
+                    });
+                    if (conflict) {
+                      toast.error(
+                        `Cycle-preset hotkey conflicts with the ${conflict}.`,
+                      );
+                      return;
+                    }
+                    try {
+                      await updateSettings({ cycle_preset_hotkey: hotkey });
+                      toast.success("Cycle-preset hotkey updated");
+                    } catch (err) {
+                      const errorMessage =
+                        err instanceof Error ? err.message : String(err);
+                      toast.error(
+                        errorMessage || "Failed to update cycle-preset hotkey",
+                      );
+                    }
+                  }}
+                  placeholder="Click to set"
+                />
+              </div>
+
+              {/* Cycle-language hotkey (spec 002 — US2). Optional binding; an
+                  empty string means unbound, in which case the cycle is a
+                  no-op. Validated against the recording / PTT / cycle-preset
+                  bindings via `findUserHotkeyConflict` (FR-012). */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="cycle-language-hotkey"
+                    className="text-sm font-medium"
+                  >
+                    Cycle language hotkey
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Cycle through enabled spoken languages
+                  </p>
+                </div>
+                <HotkeyInput
+                  value={settings.cycle_language_hotkey || ""}
+                  onChange={async (hotkey) => {
+                    const conflict = findUserHotkeyConflict(hotkey, {
+                      "recording hotkey": settings.hotkey,
+                      "push-to-talk hotkey": settings.ptt_hotkey,
+                      "cycle preset hotkey": settings.cycle_preset_hotkey,
+                    });
+                    if (conflict) {
+                      toast.error(
+                        `Cycle-language hotkey conflicts with the ${conflict}.`,
+                      );
+                      return;
+                    }
+                    try {
+                      await updateSettings({ cycle_language_hotkey: hotkey });
+                      toast.success("Cycle-language hotkey updated");
+                    } catch (err) {
+                      const errorMessage =
+                        err instanceof Error ? err.message : String(err);
+                      toast.error(
+                        errorMessage || "Failed to update cycle-language hotkey",
+                      );
+                    }
+                  }}
+                  placeholder="Click to set"
+                />
+              </div>
 
               {!canAutoInsert && showAccessibilityWarning && (
                 <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
@@ -515,6 +606,94 @@ export function GeneralSettings() {
                   </div>
                 </>
               )}
+
+              {/* Show preset on overlay (spec 002 — US1). Independent of the
+                  visibility mode so users on `never` can still opt in to a
+                  brief flash on cycle (per FR-008). */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="pill-show-preset"
+                    className="text-sm font-medium"
+                  >
+                    Show preset on overlay
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Display the active formatting preset on the recording pill
+                  </p>
+                </div>
+                <Switch
+                  id="pill-show-preset"
+                  checked={settings.pill_show_preset ?? false}
+                  onCheckedChange={async (checked) =>
+                    await updateSettings({
+                      pill_show_preset: checked,
+                    })
+                  }
+                />
+              </div>
+
+              {/* Show language on overlay (spec 002 — US2). Same independence
+                  from visibility mode as the preset toggle above. */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="pill-show-language"
+                    className="text-sm font-medium"
+                  >
+                    Show language on overlay
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Display the active spoken-language ISO code on the
+                    recording pill
+                  </p>
+                </div>
+                <Switch
+                  id="pill-show-language"
+                  checked={settings.pill_show_language ?? false}
+                  onCheckedChange={async (checked) =>
+                    await updateSettings({
+                      pill_show_language: checked,
+                    })
+                  }
+                />
+              </div>
+
+              {/* Indicator extras layout (spec 002 — US3, FR-007). Controls
+                  whether the preset/language labels render alongside the
+                  audio dots ("right") or stacked underneath them ("below").
+                  Independent of the visibility mode and the two label
+                  toggles — the value is harmless when no labels are shown. */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="pill-extras-layout"
+                    className="text-sm font-medium"
+                  >
+                    Indicator extras layout
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Where the preset and language labels appear on the pill
+                  </p>
+                </div>
+                <ToggleGroup
+                  id="pill-extras-layout"
+                  type="single"
+                  variant="outline"
+                  value={settings.pill_extras_layout ?? "right"}
+                  onValueChange={async (value) => {
+                    // Empty string fires when the user re-clicks the active
+                    // option — ignore so a layout is always selected.
+                    if (!value) return;
+                    await updateSettings({
+                      pill_extras_layout: value as PillExtrasLayout,
+                    });
+                  }}
+                >
+                  <ToggleGroupItem value="right">Right</ToggleGroupItem>
+                  <ToggleGroupItem value="below">Below</ToggleGroupItem>
+                </ToggleGroup>
+              </div>
             </div>
 
             <div className="px-4 pb-4">

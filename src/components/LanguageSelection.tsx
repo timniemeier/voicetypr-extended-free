@@ -14,7 +14,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-import { Check, ChevronsUpDown } from "lucide-react"
+import { Check, ChevronsUpDown, Circle, Disc } from "lucide-react"
 import * as React from "react"
 
 // Languages sorted alphabetically by their display name for better UX
@@ -122,14 +122,35 @@ export const languages = [
 ]
 
 interface LanguageSelectionProps {
+  /** Active language ISO 639-1 code (the language used for the next dictation). */
   value: string
+  /** Called when the user marks a different enabled entry as the active one. */
   onValueChange: (value: string) => void
   className?: string
   engine?: 'whisper' | 'parakeet' | 'soniox'
   englishOnly?: boolean
+  /**
+   * Optional ordered list of enabled language codes (spec 002 — US2).
+   * When omitted or of length 1, the control behaves like a single-select
+   * dropdown — visual SC-003 commitment: zero behaviour change for
+   * monolingual users.
+   * When length > 1, the popover surfaces a multi-select with a radio-style
+   * "active" marker plus a checkmark per enabled entry.
+   */
+  enabledLanguages?: string[]
+  /** Called when the enabled set changes (add/remove). */
+  onEnabledChange?: (next: string[]) => void
 }
 
-export function LanguageSelection({ value, onValueChange, className, engine = 'whisper', englishOnly = false }: LanguageSelectionProps) {
+export function LanguageSelection({
+  value,
+  onValueChange,
+  className,
+  engine = 'whisper',
+  englishOnly = false,
+  enabledLanguages,
+  onEnabledChange,
+}: LanguageSelectionProps) {
   const [open, setOpen] = React.useState(false)
 
   // Parakeet v3 supports 25 European languages
@@ -154,7 +175,78 @@ export function LanguageSelection({ value, onValueChange, className, engine = 'w
     }
     return languages
   }, [engine, parakeetAllowed, sonioxAllowed, englishOnly])
-  
+
+  // Multi-select mode is active only when the parent supplies BOTH the
+  // enabled set AND the change handler AND the set has > 1 entries
+  // (per research.md R-004). In all other cases the control collapses to
+  // the legacy single-select layout — zero behaviour change for monolingual
+  // users (SC-003).
+  const multiSelectEnabled =
+    Array.isArray(enabledLanguages) &&
+    typeof onEnabledChange === 'function' &&
+    enabledLanguages.length > 1
+
+  // The "is the entry checked" predicate. In single-select mode (legacy)
+  // there is no notion of "enabled" — only the active value is checked.
+  const isEnabled = React.useCallback(
+    (code: string) => {
+      if (multiSelectEnabled) {
+        return enabledLanguages!.includes(code)
+      }
+      return code === value
+    },
+    [multiSelectEnabled, enabledLanguages, value]
+  )
+
+  const handleToggleEnabled = React.useCallback(
+    (code: string) => {
+      if (!onEnabledChange || !Array.isArray(enabledLanguages)) return
+      // Disallow removing the active language; the parent component should
+      // surface "remove" via a different affordance (clicking the active
+      // marker on a different row, then unchecking).
+      if (enabledLanguages.includes(code)) {
+        // Don't allow removing the last entry — parent normalises empty sets,
+        // but disable the action client-side too for predictability.
+        if (enabledLanguages.length <= 1) return
+        const next = enabledLanguages.filter((c) => c !== code)
+        onEnabledChange(next)
+        // If we just removed the active language, fall back to the first
+        // remaining entry. (FR-010 — remove-active fallback.)
+        if (code === value && next.length > 0) {
+          onValueChange(next[0])
+        }
+      } else {
+        onEnabledChange([...enabledLanguages, code])
+      }
+    },
+    [enabledLanguages, onEnabledChange, value, onValueChange]
+  )
+
+  const handleSetActive = React.useCallback(
+    (code: string) => {
+      // The active language must always be a member of the enabled set; if
+      // it isn't yet (user clicked the radio on a not-yet-enabled row in
+      // multi-select mode), enable it first.
+      if (
+        Array.isArray(enabledLanguages) &&
+        !enabledLanguages.includes(code) &&
+        onEnabledChange
+      ) {
+        onEnabledChange([...enabledLanguages, code])
+      }
+      onValueChange(code)
+    },
+    [enabledLanguages, onEnabledChange, onValueChange]
+  )
+
+  // Single-select-style trigger label: the active language's display name.
+  // Always identical to the legacy single-select (SC-003).
+  const triggerLabel = englishOnly
+    ? "English"
+    : value
+      ? languages.find((language) => language.value === value)?.label
+      : "Select language"
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -165,40 +257,107 @@ export function LanguageSelection({ value, onValueChange, className, engine = 'w
           disabled={englishOnly}
           className={cn("w-48 justify-between", className)}
         >
-          {englishOnly
-            ? "English"
-            : value
-              ? languages.find((language) => language.value === value)?.label
-              : "Select language"}
+          {triggerLabel}
           <ChevronsUpDown className="opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-0">
+      <PopoverContent className="w-[260px] p-0">
         <Command>
           <CommandInput placeholder="Search language..." className="h-9" />
           <CommandList>
             <CommandEmpty>No language found.</CommandEmpty>
             <CommandGroup>
-              {displayed.map((language) => (
-                <CommandItem
-                  key={language.value}
-                  // Use label for search instead of value so users can search by language name
-                  value={language.label}
-                  onSelect={() => {
-                    // Pass the actual language code (value) when selected
-                    onValueChange(language.value)
-                    setOpen(false)
-                  }}
-                >
-                  {language.label}
-                  <Check
-                    className={cn(
-                      "ml-auto",
-                      value === language.value ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                </CommandItem>
-              ))}
+              {displayed.map((language) => {
+                const enabled = isEnabled(language.value)
+                const active = value === language.value
+                // In multi-select mode, non-EN entries are disabled when
+                // the active model is English-only (englishOnly === true).
+                // In legacy single-select mode the popover is already
+                // disabled at the trigger level.
+                const rowDisabled = englishOnly && language.value !== 'en'
+
+                if (!multiSelectEnabled) {
+                  // Legacy single-select layout — preserved verbatim so
+                  // monolingual users see zero behaviour change (SC-003).
+                  return (
+                    <CommandItem
+                      key={language.value}
+                      value={language.label}
+                      disabled={rowDisabled}
+                      onSelect={() => {
+                        handleSetActive(language.value)
+                        setOpen(false)
+                      }}
+                    >
+                      {language.label}
+                      <Check
+                        className={cn(
+                          "ml-auto",
+                          active ? "opacity-100" : "opacity-0"
+                        )}
+                      />
+                    </CommandItem>
+                  )
+                }
+
+                // Multi-select layout: a row carries (a) an active radio
+                // marker on the left, (b) the language name, (c) a check on
+                // the right that toggles enabled membership. Selecting the
+                // row marks it active (and enables it if it wasn't yet).
+                return (
+                  <CommandItem
+                    key={language.value}
+                    value={language.label}
+                    disabled={rowDisabled}
+                    onSelect={() => {
+                      handleSetActive(language.value)
+                      setOpen(false)
+                    }}
+                  >
+                    <button
+                      type="button"
+                      aria-label={
+                        active ? `${language.label} (active)` : `Mark ${language.label} active`
+                      }
+                      data-testid={`language-active-${language.value}`}
+                      className="mr-2 inline-flex items-center justify-center"
+                      disabled={rowDisabled}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleSetActive(language.value)
+                      }}
+                    >
+                      {active ? (
+                        <Disc className="h-3.5 w-3.5 text-primary" />
+                      ) : (
+                        <Circle className="h-3.5 w-3.5 text-muted-foreground/40" />
+                      )}
+                    </button>
+                    <span>{language.label}</span>
+                    <button
+                      type="button"
+                      aria-label={
+                        enabled
+                          ? `Remove ${language.label} from enabled languages`
+                          : `Enable ${language.label}`
+                      }
+                      data-testid={`language-enabled-${language.value}`}
+                      className="ml-auto inline-flex items-center justify-center"
+                      disabled={rowDisabled}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleToggleEnabled(language.value)
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          enabled ? "opacity-100" : "opacity-0"
+                        )}
+                      />
+                    </button>
+                  </CommandItem>
+                )
+              })}
             </CommandGroup>
           </CommandList>
         </Command>

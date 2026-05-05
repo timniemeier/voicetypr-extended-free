@@ -1,5 +1,4 @@
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { open } from '@tauri-apps/plugin-shell';
 import { getVersion } from '@tauri-apps/api/app';
@@ -8,41 +7,15 @@ import {
   GitFork,
   Github,
   Info,
-  RefreshCw,
 } from "lucide-react";
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { updateService } from '@/services/updateService';
 
 const UPSTREAM_VERSION = "1.12.3";
 const UPSTREAM_REPO = "https://github.com/moinulmoin/voicetypr";
 
-const FORK_CHANGELOG: { title: string; description: string }[] = [
-  {
-    title: "Editable AI formatting prompts",
-    description:
-      "New \"Custom Prompts (Advanced)\" panel on the Formatting page lets you edit the base post-processor and per-preset transforms (Prompts / Email / Commit), with a tabbed selector and per-field reset.",
-  },
-  {
-    title: "About page customised for the fork",
-    description:
-      "Removed marketing links, surfaced upstream attribution, and added this changelog.",
-  },
-  {
-    title: "Sidebar cleanup",
-    description:
-      "Removed the License nav entry, the Trial Expired badge, and the Upgrade to Pro CTA. Dropped the unreachable license route and event listener.",
-  },
-  {
-    title: "License check bypassed",
-    description:
-      "check_license_status returns a fixed Licensed/Pro response so the app runs without a license server. Permitted under AGPL v3.",
-  },
-];
-
 export function AboutSection() {
   const [appVersion, setAppVersion] = useState<string>('');
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
   useEffect(() => {
     const fetchVersion = async () => {
@@ -57,12 +30,6 @@ export function AboutSection() {
 
     fetchVersion();
   }, []);
-
-  const handleCheckUpdate = async () => {
-    setIsCheckingUpdate(true);
-    await updateService.checkForUpdatesManually();
-    setIsCheckingUpdate(false);
-  };
 
   const openExternalLink = async (url: string) => {
     try {
@@ -93,7 +60,7 @@ export function AboutSection() {
           <div className="space-y-4">
             <h2 className="text-base font-semibold">App Information</h2>
 
-            <div className="rounded-lg border border-border/50 bg-card p-4 space-y-4">
+            <div className="rounded-lg border border-border/50 bg-card p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Info className="h-4 w-4 text-muted-foreground" />
@@ -108,18 +75,6 @@ export function AboutSection() {
                     Fork
                   </Badge>
                 </div>
-              </div>
-
-              <div className="flex justify-center">
-                <Button
-                  onClick={handleCheckUpdate}
-                  disabled={isCheckingUpdate}
-                  variant="ghost"
-                  size="sm"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
-                  {isCheckingUpdate ? 'Checking...' : 'Check for Updates'}
-                </Button>
               </div>
             </div>
           </div>
@@ -145,22 +100,6 @@ export function AboutSection() {
               </div>
               <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0 ml-3" />
             </button>
-          </div>
-
-          {/* Fork Changelog Section */}
-          <div className="space-y-4">
-            <h2 className="text-base font-semibold">Fork Changelog</h2>
-
-            <div className="rounded-lg border border-border/50 bg-card divide-y divide-border/50">
-              {FORK_CHANGELOG.map((entry) => (
-                <div key={entry.title} className="p-4">
-                  <p className="text-sm font-medium">{entry.title}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {entry.description}
-                  </p>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       </ScrollArea>

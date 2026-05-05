@@ -43,6 +43,14 @@ pub struct AppState {
     pub recording_mode: Arc<Mutex<RecordingMode>>,
     pub ptt_key_held: Arc<AtomicBool>,
     pub ptt_shortcut: Arc<Mutex<Option<tauri_plugin_global_shortcut::Shortcut>>>,
+    /// Shortcut bound to "cycle the active formatting preset". Stored alongside
+    /// `recording_shortcut`/`ptt_shortcut` so the global-shortcut callback can
+    /// match by identity without re-parsing the settings on every keypress.
+    pub cycle_preset_shortcut: Arc<Mutex<Option<tauri_plugin_global_shortcut::Shortcut>>>,
+    /// Shortcut bound to "cycle the active spoken language" (per spec 002 — US2).
+    /// Mirrors `cycle_preset_shortcut`. Held in `AppState` so the callback can
+    /// match by identity.
+    pub cycle_language_shortcut: Arc<Mutex<Option<tauri_plugin_global_shortcut::Shortcut>>>,
     pub should_cancel_recording: Arc<AtomicBool>,
     pub pending_stop_after_start: Arc<AtomicBool>,
     pub esc_pressed_once: Arc<AtomicBool>,
@@ -71,6 +79,8 @@ impl AppState {
             recording_mode: Arc::new(Mutex::new(RecordingMode::Toggle)),
             ptt_key_held: Arc::new(AtomicBool::new(false)),
             ptt_shortcut: Arc::new(Mutex::new(None)),
+            cycle_preset_shortcut: Arc::new(Mutex::new(None)),
+            cycle_language_shortcut: Arc::new(Mutex::new(None)),
             should_cancel_recording: Arc::new(AtomicBool::new(false)),
             pending_stop_after_start: Arc::new(AtomicBool::new(false)),
             esc_pressed_once: Arc::new(AtomicBool::new(false)),

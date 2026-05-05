@@ -34,6 +34,15 @@ This feature adds keyboard-driven, overlay-visible cycling for both
 axes — formatting preset and spoken language — without changing any
 other part of the dictation pipeline.
 
+## Clarifications
+
+### Session 2026-05-04
+
+- Q: One combined hotkey or two separate hotkeys (one per axis)? → A: Two separate, independently bindable / clearable global hotkeys — one for "cycle preset," one for "cycle language." Matches the existing pattern (each VoiceTypr action has its own binding) and avoids long combined cycles when N enabled languages × 4 presets grows.
+- Q: How should the multi-language UI be shaped — replace the existing single-select, keep it and add a second multi-select, or use a chip / token list? → A: Replace the existing single-select dropdown with a multi-select control; the currently active language is a marker (radio / star / "active" badge) on one of the enabled entries. Single source of truth, no duplicated UI, monolingual users keep a 1-entry list with zero visible behavior change. The existing `language` field becomes "the active member of the enabled set."
+- Q: When an English-only speech model is active and the user presses the cycle-language hotkey with `[en, de, fr]` enabled, what happens — silently skip non-EN entries, no-op with toast, or cycle freely while transcription stays English? → A: No-op with a non-disruptive toast — "Active model is English-only — switch model in Models to use other languages." A single, predictable response beats a silent skip the user might mistake for a broken hotkey, and avoids the overlay/reality mismatch of cycling labels that don't apply.
+- Q: When both labels are visible and layout = "right of dots," what is the order and separator? → A: `[dots] en · Email` — language ISO code first (lowercase 2-letter), then preset name, separated by a middle dot (`·`). Language first because the user listed it first; the short ISO code is a visually small anchor that flows into the longer preset word; the middle dot is unobtrusive and is the existing macOS toolbar / menu-bar idiom. The "below" layout uses the same order on a single second line: `en · Email`.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Cycle formatting preset from the keyboard, with the active preset shown on the overlay (Priority: P1)
@@ -148,12 +157,12 @@ identically to selecting that language manually from the dropdown.
 
 4. **Given** the active speech model is English-only (e.g., a
    Whisper `*.en` variant or Parakeet v2),
-   **When** the user cycles to a non-English language,
-   **Then** the existing English-only enforcement still wins —
-   either the cycle skips non-English entries while the model is
-   English-only, or the user is told the active model only supports
-   English — the privacy / correctness invariant from
-   ModelsSection's `isEnglishOnlyModel` is not bypassed.
+   **When** the user presses the cycle-language hotkey,
+   **Then** the active language stays at `en`, a non-disruptive
+   toast appears ("Active model is English-only — switch model in
+   Models to use other languages."), the overlay's language label
+   stays at `en`, and the existing English-only invariant from
+   ModelsSection's `isEnglishOnlyModel` is preserved.
 
 5. **Given** the overlay's language extra is enabled,
    **When** the language changes (from any source — hotkey,
@@ -237,10 +246,10 @@ and the screen center.
   enabled language (or to `en` if the list became empty) and update
   the overlay label.
 - **English-only speech model + multiple enabled languages.** While
-  an English-only model is active, the cycle MUST skip non-English
-  entries (or the cycle hotkey is a no-op), and the overlay shows
-  `en`. The existing forced-English behavior in `ModelsSection`
-  takes precedence.
+  an English-only model is active, the cycle-language hotkey is a
+  no-op with a non-disruptive toast (see FR-011), and the overlay
+  shows `en`. The existing forced-English behavior in
+  `ModelsSection` takes precedence.
 - **Localization of preset names.** The four preset names are
   short, fixed identifiers (Default / Prompts / Email / Commit).
   This spec does not introduce localization for them; they render
@@ -267,11 +276,15 @@ and the screen center.
   and conflict-checked using the same UX patterns the dictation
   hotkey already uses.
 
-- **FR-003**: The Models → Spoken Language section MUST allow the
-  user to enable **a set of one or more languages** (henceforth
-  "enabled languages"). The set MUST persist across app restarts.
-  When the enabled set has exactly one entry, behavior is identical
-  to today's single-language behavior.
+- **FR-003**: The Models → Spoken Language section MUST replace
+  today's single-select language dropdown with a multi-select
+  control that lets the user mark **one or more** languages as
+  enabled, with exactly one of those entries marked as the
+  currently active one (via a radio / star / "active" badge — the
+  visual treatment is left to design). The enabled set MUST persist
+  across app restarts. When the enabled set has exactly one entry,
+  behavior is identical to today's single-language behavior and the
+  control may visually collapse to a single-selection appearance.
 
 - **FR-004**: The system MUST track an **active language** that is
   always one of the enabled languages. Changing the active language
@@ -292,12 +305,15 @@ and the screen center.
   Prompts, Email, Commit) and the **active language ISO code**
   (lowercase two-letter, e.g., `en`, `de`) as additional labels
   next to the audio dots, gated by per-label boolean options:
-  "Show preset on overlay" and "Show language on overlay."
+  "Show preset on overlay" and "Show language on overlay." When
+  both labels are shown, the order MUST be `<language-code> · <preset-name>`
+  (language first, middle-dot `·` separator, preset second).
 
 - **FR-007**: The overlay MUST support two layouts for the new
-  labels: **Right** (labels to the right of the audio dots, single
-  line, pill grows horizontally) and **Below** (labels under the
-  audio dots, two lines, pill grows vertically). The layout MUST be
+  labels: **Right** (labels to the right of the audio dots on a
+  single line — `[dots] en · Email` — pill grows horizontally) and
+  **Below** (labels on a second line under the audio dots — same
+  `en · Email` order — pill grows vertically). The layout MUST be
   user-selectable in the General / Indicator settings.
 
 - **FR-008**: When `pill_indicator_mode = never` and the user
@@ -320,9 +336,12 @@ and the screen center.
 
 - **FR-011**: When an English-only speech model is active, the
   existing forced-English behavior MUST take precedence over both
-  the user's active language and the cycle hotkey: the overlay
-  shows `en`, the cycle hotkey skips non-English entries (or is a
-  no-op), and the actual transcription is performed in English.
+  the user's active language and the cycle hotkey. The overlay
+  MUST show `en`. The cycle-language hotkey MUST be a no-op
+  accompanied by a non-disruptive toast — "Active model is
+  English-only — switch model in Models to use other languages." —
+  rather than silently rotating through non-EN entries. The actual
+  transcription remains in English.
 
 - **FR-012**: Both new hotkeys MUST go through the existing hotkey
   conflict-detection and registration paths (`lib/hotkey-conflicts.ts`
@@ -412,10 +431,6 @@ and the screen center.
   `EnhancementPreset` — Default, Prompts, Email, Commit — and the
   cycle order matches that declared order. This feature does not
   add, remove, or rename presets.
-- The user wants two *separate* hotkeys (one per axis) rather than
-  a single hotkey that cycles both. The phrasing "toggle both via
-  hotkey" is read as "each via its own hotkey," consistent with how
-  every other VoiceTypr action has its own binding.
 - The existing on-screen pill (`RecordingPill.tsx`) is the right
   surface for the new labels; this feature does NOT introduce a
   second floating overlay window.
@@ -426,12 +441,6 @@ and the screen center.
 - ISO codes shown on the overlay are lowercase two-letter (ISO
   639-1) — `en`, `de`, `fr`, `es`, etc. — matching the codes the
   existing `LanguageSelection` component already uses.
-- Enabling a *set* of languages in Models → Spoken Language is the
-  natural extension of today's single-select picker; a multi-select
-  control replaces or augments the existing single-value control,
-  and the existing `language` field becomes the *active* one out of
-  the enabled set. No separate "default language" concept is
-  introduced.
 - Persistence reuses the existing `AppSettings` / settings storage
   (the same store that holds `language`, `hotkey`, `ptt_hotkey`,
   `pill_indicator_*`). No new persistence layer.

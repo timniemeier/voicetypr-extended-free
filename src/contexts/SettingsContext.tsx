@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, ReactNode, useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { AppSettings } from '@/types';
@@ -18,11 +18,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
+  // Mirror of `settings` so two `updateSettings` calls fired in the same
+  // render tick (e.g. enabling a new language and marking it active) see
+  // each other's writes instead of both reading a stale closure snapshot.
+  const settingsRef = useRef<AppSettings | null>(null);
+
   const loadSettings = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
       const appSettings = await invoke<AppSettings>('get_settings');
+      settingsRef.current = appSettings;
       setSettings(appSettings);
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to load settings');
@@ -34,25 +40,26 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateSettings = useCallback(async (updates: Partial<AppSettings>) => {
-    if (!settings) {
+    const current = settingsRef.current;
+    if (!current) {
       return;
     }
 
-    const updatedSettings = { ...settings, ...updates };
-    const previousSettings = settings;
+    const updatedSettings = { ...current, ...updates };
+    const previousSettings = current;
 
-    // Optimistic update - update state immediately so UI responds instantly
+    settingsRef.current = updatedSettings;
     setSettings(updatedSettings);
 
     try {
       await invoke('save_settings', { settings: updatedSettings });
     } catch (err) {
-      // Rollback on error
+      settingsRef.current = previousSettings;
       setSettings(previousSettings);
       console.error('[SettingsContext] Failed to update settings:', err);
       throw err;
     }
-  }, [settings]);
+  }, []);
 
   // Load settings on mount
   useEffect(() => {
