@@ -127,7 +127,7 @@ export function PromptsSection() {
         </p>
       </div>
 
-      <div className="flex-1 min-h-0 grid grid-cols-[320px_1fr] divide-x divide-border/40">
+      <div className="flex-1 min-h-0 grid grid-cols-[192px_1fr] divide-x divide-border/40">
         {/* Left pane: search + grouped list */}
         <div className="flex flex-col min-h-0">
           <div className="shrink-0 p-3 border-b border-border/40">
