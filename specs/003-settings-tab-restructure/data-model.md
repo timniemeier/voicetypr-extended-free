@@ -76,7 +76,7 @@ The sidebar's tab list — pure UI structure, not persisted.
 - **Removed**: tab id `models` (label "Models"), tab id `formatting` (label "Formatting").
 - **Added**: tab id `prompts` (label "Prompts").
 - **Added (replacing removed)**: tab id `llm-models` (label "LLM Models"), tab id `stt-models` (label "STT Models").
-- **Order**: `prompts` → `llm-models` → `stt-models` (between `general` and `about`).
+- **Order**: `stt-models` → `prompts` → `llm-models` (between `general` and `about`). Per spec Q6.
 
 ---
 

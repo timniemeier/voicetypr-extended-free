@@ -33,9 +33,9 @@ const mainSections = [
   { id: "recordings", label: "History", icon: Clock },
   { id: "audio", label: "Upload", icon: FileAudio },
   { id: "general", label: "Settings", icon: Settings2 },
+  { id: "stt-models", label: "STT Models", icon: Mic },
   { id: "prompts", label: "Prompts", icon: Sparkles },
   { id: "llm-models", label: "LLM Models", icon: Cpu },
-  { id: "stt-models", label: "STT Models", icon: Mic },
   { id: "about", label: "About", icon: Info },
 ];
 

@@ -14,6 +14,7 @@
 - Q: How is an empty prompt text field handled — silent fallback, warn-but-allow, block save, or send empty? → A: **Block save while empty**. Inline validation prevents persisting an empty Prompt field on either built-in or custom prompts. Built-ins offer "Reset to default" as the recovery path; custom prompts must be created with non-empty text. The AI provider is never asked to run with an empty user prompt.
 - Q: Reset-to-default scope on built-in prompts — per-field, per-prompt, or both? → A: **Per-prompt**. A single "Reset this prompt to default" action on the editor pane restores Name, Icon, and Prompt text together to their shipped defaults. There is no per-field reset; users intentionally resetting accept that all three fields revert.
 - Q: What happens to today's "Formatting Options" (`EnhancementSettings` per-preset toggles) — keep on LLM Models, move to Prompts as per-prompt state, remove entirely, or move to Settings? → A: **Remove entirely**. The `EnhancementSettings` toggles are deleted. Any behavior users relied on must be expressed via the Prompt text itself (e.g., "be conservative with edits"). This is an explicit breaking change accepted as part of the simplification: prompts become the single source of formatting intent, with no separate runtime-behavior toggles.
+- Q: Sidebar order of the three new/renamed tabs — Prompts → LLM Models → STT Models (original), or some other arrangement? → A: **STT Models → Prompts → LLM Models**. Reading order matches user mental flow: foundation (which transcription engine) → content (what the prompt says) → polish (which LLM post-processes). Decided live during the runtime smoke test.
 
 ## Context: the settings surfaces this feature touches
 
@@ -121,7 +122,7 @@ from the Prompts tab work.
 
 1. **Given** the user opens settings for the first time, **When** they
    scan the sidebar, **Then** they see three labels in this section:
-   "Prompts", "LLM Models", "STT Models" — each with a distinct icon.
+   "STT Models", "Prompts", "LLM Models" — each with a distinct icon.
 2. **Given** the user clicks "LLM Models", **Then** they see only AI
    provider selection, API key entry, model picker, and the Setup
    Guide — but NOT the prompt text editor, NOT the legacy "Custom
@@ -219,7 +220,7 @@ LLM Models / STT Models renames.
 
 - **FR-001**: The settings sidebar MUST expose three tabs in this slot,
   in this order, replacing the current `Models` and `Formatting`
-  entries: **Prompts** → **LLM Models** → **STT Models**.
+  entries: **STT Models** → **Prompts** → **LLM Models** (per Q6).
 - **FR-002**: Each of the three tabs MUST have a distinct icon and label
   matching the screenshot intent: Prompts uses a sparkle/document icon,
   LLM Models a chip/cpu icon, STT Models a microphone or audio icon

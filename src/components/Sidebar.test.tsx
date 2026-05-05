@@ -26,9 +26,9 @@ describe("Sidebar (US2 — tab list shape)", () => {
       "History",
       "Upload",
       "Settings",
+      "STT Models",
       "Prompts",
       "LLM Models",
-      "STT Models",
       "About",
     ];
     // For each expected entry, verify it appears once and they appear in order.
