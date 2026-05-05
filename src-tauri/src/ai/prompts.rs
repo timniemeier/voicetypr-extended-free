@@ -1,5 +1,241 @@
 use serde::{Deserialize, Serialize};
 
+/// Allowed icon names for prompt entries. Mirrors `src/lib/prompts/icon-allowlist.ts`.
+pub const ALLOWED_ICONS: &[&str] = &[
+    "FileText",
+    "Sparkles",
+    "Mail",
+    "GitCommit",
+    "Pencil",
+    "BookOpen",
+    "List",
+    "MessageSquare",
+    "Briefcase",
+    "Hash",
+    "Scissors",
+    "Type",
+    "StickyNote",
+    "Terminal",
+    "Star",
+    "Zap",
+];
+
+/// Maximum length, in chars, of a prompt's display name.
+pub const MAX_PROMPT_NAME_LEN: usize = 64;
+
+/// Schema version for the persisted PromptLibrary blob.
+pub const PROMPT_LIBRARY_VERSION: u32 = 1;
+
+/// Stable id of the Default built-in. Used as the fallback active prompt id.
+pub const BUILTIN_DEFAULT_ID: &str = "builtin:default";
+
+/// Discriminator for a prompt entry: shipped built-in (with overrides) or user-created.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PromptKind {
+    Builtin,
+    Custom,
+}
+
+/// Stable enum tag for built-in prompts. Used by `build_enhancement_prompt` to
+/// route language-aware base assembly. Persisted on the wire as snake_case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BuiltinId {
+    Default,
+    Prompts,
+    Email,
+    Commit,
+}
+
+impl BuiltinId {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            BuiltinId::Default => "default",
+            BuiltinId::Prompts => "prompts",
+            BuiltinId::Email => "email",
+            BuiltinId::Commit => "commit",
+        }
+    }
+
+    /// Stable persistent id, e.g. `"builtin:email"`.
+    pub fn prompt_id(&self) -> String {
+        format!("builtin:{}", self.as_str())
+    }
+
+    pub fn from_str(s: &str) -> Option<BuiltinId> {
+        match s {
+            "default" => Some(BuiltinId::Default),
+            "prompts" => Some(BuiltinId::Prompts),
+            "email" => Some(BuiltinId::Email),
+            "commit" => Some(BuiltinId::Commit),
+            _ => None,
+        }
+    }
+
+    /// Canonical order for sidebar rendering and migration.
+    pub fn canonical_order() -> [BuiltinId; 4] {
+        [
+            BuiltinId::Default,
+            BuiltinId::Prompts,
+            BuiltinId::Email,
+            BuiltinId::Commit,
+        ]
+    }
+}
+
+/// One entry in the prompt library. Either a built-in (with an immutable
+/// `builtin_id`) or a user-authored custom prompt.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Prompt {
+    pub id: String,
+    pub kind: PromptKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub builtin_id: Option<BuiltinId>,
+    pub name: String,
+    pub icon: String,
+    pub prompt_text: String,
+}
+
+/// Persistent prompt library blob.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PromptLibrary {
+    pub version: u32,
+    pub active_prompt_id: String,
+    pub prompts: Vec<Prompt>,
+}
+
+impl Default for PromptLibrary {
+    fn default() -> Self {
+        let prompts: Vec<Prompt> = BuiltinId::canonical_order()
+            .iter()
+            .map(|id| BUILTIN_PROMPT_DEFAULTS.get(id).expect("default exists").to_prompt())
+            .collect();
+        Self {
+            version: PROMPT_LIBRARY_VERSION,
+            active_prompt_id: BUILTIN_DEFAULT_ID.to_string(),
+            prompts,
+        }
+    }
+}
+
+/// Validate a `Prompt`'s user-mutable fields. Used by both create and update paths.
+pub fn validate_prompt_fields(name: &str, icon: &str, prompt_text: &str) -> Result<(), String> {
+    let trimmed_name = name.trim();
+    if trimmed_name.is_empty() {
+        return Err("name must be non-empty".to_string());
+    }
+    if trimmed_name.chars().count() > MAX_PROMPT_NAME_LEN {
+        return Err(format!(
+            "name exceeds maximum length of {} characters",
+            MAX_PROMPT_NAME_LEN
+        ));
+    }
+    if !ALLOWED_ICONS.contains(&icon) {
+        return Err("icon not in allowlist".to_string());
+    }
+    if prompt_text.trim().is_empty() {
+        return Err("prompt_text must be non-empty".to_string());
+    }
+    if prompt_text.len() > MAX_CUSTOM_PROMPT_LEN {
+        return Err(format!(
+            "prompt_text exceeds {} bytes",
+            MAX_CUSTOM_PROMPT_LEN
+        ));
+    }
+    Ok(())
+}
+
+/// Shipped defaults for one built-in. `prompt_text` is the FULL prompt that
+/// gets sent to the AI (base post-processor template + any preset-specific
+/// transform), with `{language}` placeholder still in place for late
+/// substitution by `build_enhancement_prompt_for_active`.
+pub struct BuiltinDefault {
+    pub builtin_id: BuiltinId,
+    pub name: &'static str,
+    pub icon: &'static str,
+    prompt_text_fn: fn() -> String,
+}
+
+impl BuiltinDefault {
+    /// Produce the shipped prompt text. For Default this is just the base
+    /// template; for the other built-ins it is base + "\n\n" + transform.
+    pub fn prompt_text(&self) -> String {
+        (self.prompt_text_fn)()
+    }
+
+    pub fn to_prompt(&self) -> Prompt {
+        Prompt {
+            id: self.builtin_id.prompt_id(),
+            kind: PromptKind::Builtin,
+            builtin_id: Some(self.builtin_id),
+            name: self.name.to_string(),
+            icon: self.icon.to_string(),
+            prompt_text: self.prompt_text(),
+        }
+    }
+}
+
+/// Lazy lookup of shipped defaults by `BuiltinId`.
+pub struct BuiltinDefaults;
+
+impl BuiltinDefaults {
+    pub fn get(&self, id: &BuiltinId) -> Option<&'static BuiltinDefault> {
+        match id {
+            BuiltinId::Default => Some(&DEFAULT_BUILTIN),
+            BuiltinId::Prompts => Some(&PROMPTS_BUILTIN),
+            BuiltinId::Email => Some(&EMAIL_BUILTIN),
+            BuiltinId::Commit => Some(&COMMIT_BUILTIN),
+        }
+    }
+}
+
+pub const BUILTIN_PROMPT_DEFAULTS: BuiltinDefaults = BuiltinDefaults;
+
+fn default_builtin_text() -> String {
+    BASE_PROMPT_TEMPLATE.to_string()
+}
+
+fn prompts_builtin_text() -> String {
+    format!("{}\n\n{}", BASE_PROMPT_TEMPLATE, PROMPTS_TRANSFORM)
+}
+
+fn email_builtin_text() -> String {
+    format!("{}\n\n{}", BASE_PROMPT_TEMPLATE, EMAIL_TRANSFORM)
+}
+
+fn commit_builtin_text() -> String {
+    format!("{}\n\n{}", BASE_PROMPT_TEMPLATE, COMMIT_TRANSFORM)
+}
+
+const DEFAULT_BUILTIN: BuiltinDefault = BuiltinDefault {
+    builtin_id: BuiltinId::Default,
+    name: "Default",
+    icon: "FileText",
+    prompt_text_fn: default_builtin_text,
+};
+
+const PROMPTS_BUILTIN: BuiltinDefault = BuiltinDefault {
+    builtin_id: BuiltinId::Prompts,
+    name: "Prompts",
+    icon: "Sparkles",
+    prompt_text_fn: prompts_builtin_text,
+};
+
+const EMAIL_BUILTIN: BuiltinDefault = BuiltinDefault {
+    builtin_id: BuiltinId::Email,
+    name: "Email",
+    icon: "Mail",
+    prompt_text_fn: email_builtin_text,
+};
+
+const COMMIT_BUILTIN: BuiltinDefault = BuiltinDefault {
+    builtin_id: BuiltinId::Commit,
+    name: "Commit",
+    icon: "GitCommit",
+    prompt_text_fn: commit_builtin_text,
+};
+
 // Base prompt template with {language} placeholder
 pub const BASE_PROMPT_TEMPLATE: &str = r#"You are a post-processor for voice transcripts.
 
@@ -183,6 +419,10 @@ fn resolve_override<'a>(override_value: Option<&'a String>, default: &'a str) ->
     }
 }
 
+/// Legacy entry point: takes the old `EnhancementOptions` + `CustomPrompts` shape.
+/// Retained only for the deprecated cmd surface during the one-release transition.
+/// New code paths route through `build_enhancement_prompt_for_active`.
+#[deprecated(note = "use build_enhancement_prompt_for_active")]
 pub fn build_enhancement_prompt(
     text: &str,
     context: Option<&str>,
@@ -208,21 +448,41 @@ pub fn build_enhancement_prompt(
         }
     };
 
-    // Build the complete prompt
-    let mut prompt = if mode_transform.is_empty() {
-        // Default preset: just base processing
-        format!("{}\n\nTranscribed text:\n{}", base_prompt, text.trim())
+    assemble_prompt(&base_prompt, mode_transform, text, context)
+}
+
+/// New entry point: takes a fully-resolved active `Prompt`. Both built-ins
+/// and custom prompts resolve through the same path: `prompt_text` is THE
+/// prompt that gets sent to the AI, with `{language}` substituted late.
+/// Built-ins ship with the base post-processor template baked in; users see
+/// and edit the same string the model sees.
+pub fn build_enhancement_prompt_for_active(
+    text: &str,
+    context: Option<&str>,
+    active_prompt: &Prompt,
+    language: Option<&str>,
+) -> String {
+    let body = apply_language(active_prompt.prompt_text.as_str(), language);
+    let mut prompt = format!("{}\n\nTranscribed text:\n{}", body, text.trim());
+    if let Some(ctx) = context {
+        prompt.push_str(&format!("\n\nContext: {}", ctx));
+    }
+    prompt
+}
+
+fn assemble_prompt(base: &str, transform: &str, text: &str, context: Option<&str>) -> String {
+    let trimmed_transform = transform.trim();
+    let mut prompt = if trimmed_transform.is_empty() {
+        format!("{}\n\nTranscribed text:\n{}", base, text.trim())
     } else {
-        // Other presets: base + transform
         format!(
             "{}\n\n{}\n\nTranscribed text:\n{}",
-            base_prompt,
-            mode_transform,
+            base,
+            trimmed_transform,
             text.trim()
         )
     };
 
-    // Add context if provided
     if let Some(ctx) = context {
         prompt.push_str(&format!("\n\nContext: {}", ctx));
     }

@@ -1,7 +1,14 @@
 // AI Enhancement Types that match Rust structures
 
+/**
+ * @deprecated Use `Prompt` + `PromptLibrary`. Removal target: release after the
+ * one shipping the Prompts tab restructure.
+ */
 export type EnhancementPreset = 'Default' | 'Prompts' | 'Email' | 'Commit';
 
+/**
+ * @deprecated Use `PromptLibrary.active_prompt_id`.
+ */
 export interface EnhancementOptions {
   preset: EnhancementPreset;
   custom_vocabulary: string[];
@@ -12,6 +19,7 @@ export interface AISettings {
   provider: string;
   model: string;
   hasApiKey: boolean;
+  /** @deprecated read `active_prompt_id` from the prompt library instead. */
   enhancement_options?: EnhancementOptions;
 }
 
@@ -22,7 +30,10 @@ export interface AIModel {
   description?: string;
 }
 
-// Helper to convert between frontend camelCase and backend snake_case
+/**
+ * @deprecated Use the `Prompt` library. Removal target: release after the one
+ * shipping the Prompts tab restructure.
+ */
 export const toBackendOptions = (options: {
   preset: EnhancementPreset;
   customVocabulary: string[];
@@ -31,6 +42,9 @@ export const toBackendOptions = (options: {
   custom_vocabulary: options.customVocabulary,
 });
 
+/**
+ * @deprecated Use the `Prompt` library.
+ */
 export const fromBackendOptions = (options: EnhancementOptions): {
   preset: EnhancementPreset;
   customVocabulary: string[];
@@ -39,10 +53,36 @@ export const fromBackendOptions = (options: EnhancementOptions): {
   customVocabulary: options.custom_vocabulary,
 });
 
-// User-supplied prompt overrides. `null` per field means "use built-in default".
+/**
+ * @deprecated Replaced by per-`Prompt` `prompt_text`. Removal target: next release.
+ */
 export interface CustomPrompts {
   base: string | null;
   prompts: string | null;
   email: string | null;
   commit: string | null;
+}
+
+// ---- Prompt library (new, replaces EnhancementOptions/CustomPrompts) ----
+
+export type PromptKind = 'builtin' | 'custom';
+
+export type BuiltinId = 'default' | 'prompts' | 'email' | 'commit';
+
+/** One entry in the prompt library — built-in (with overrides) or user-created. */
+export interface Prompt {
+  id: string;
+  kind: PromptKind;
+  /** Present iff `kind === 'builtin'`. Stable enum tag for transform routing. */
+  builtin_id?: BuiltinId;
+  name: string;
+  icon: string;
+  prompt_text: string;
+}
+
+/** Persistent prompt library blob (single tauri-plugin-store key `prompts`). */
+export interface PromptLibrary {
+  version: number;
+  active_prompt_id: string;
+  prompts: Prompt[];
 }

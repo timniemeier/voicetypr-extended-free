@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { Label } from "../ui/label";
 import { invoke } from "@tauri-apps/api/core";
 
-interface ModelsSectionProps {
+interface STTModelsSectionProps {
   models: [string, ModelInfo][];
   downloadProgress: Record<string, number>;
   verifyingModels: Set<string>;
@@ -33,7 +33,7 @@ interface CloudModalState {
   mode: CloudModalMode;
 }
 
-export function ModelsSection({
+export function STTModelsSection({
   models,
   downloadProgress,
   verifyingModels,
@@ -43,7 +43,7 @@ export function ModelsSection({
   onCancelDownload,
   onSelect,
   refreshModels,
-}: ModelsSectionProps) {
+}: STTModelsSectionProps) {
   const { settings, updateSettings } = useSettings();
   const [cloudModal, setCloudModal] = useState<CloudModalState | null>(null);
   const [cloudModalLoading, setCloudModalLoading] = useState(false);
@@ -193,7 +193,7 @@ export function ModelsSection({
         try {
           await invoke('update_tray_menu');
         } catch (e) {
-          console.warn('[ModelsSection] Failed to refresh tray menu after disconnect:', e);
+          console.warn('[STTModelsSection] Failed to refresh tray menu after disconnect:', e);
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -278,9 +278,9 @@ export function ModelsSection({
       <div className="px-6 py-4 border-b border-border/40">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">Models</h1>
+            <h1 className="text-2xl font-semibold">STT Models</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Download/Setup and select the model to use
+              Speech-to-text engine downloads (Whisper / Parakeet) and language selection
             </p>
           </div>
           <div className="flex items-center gap-3">

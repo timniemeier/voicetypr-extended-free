@@ -18,9 +18,20 @@ const baseExtends = [
 ];
 
 module.exports = [
+  {
+    ignores: [
+      'dist/',
+      'public/',
+      'node_modules/',
+      'src-tauri/**',
+      // Pre-existing untracked test from incomplete feature-002 work; depends
+      // on a stashed `enabled_languages` settings field that isn't checked in
+      // yet. Out of scope for feature 003 — see follow-ups.
+      'src/components/sections/__tests__/ModelsSection.languages.test.tsx',
+    ],
+  },
   ...baseExtends.flatMap((configName) => compat.extends(configName)),
     {
-      ignores: ['dist/', 'public/', 'node_modules/', 'src-tauri/**'],
       languageOptions: {
       parser: tsParser,
       parserOptions: {

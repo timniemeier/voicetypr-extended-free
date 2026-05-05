@@ -1,10 +1,11 @@
 // Direct imports for instant desktop app experience
 import { AboutTab } from "./AboutTab";
 import { AdvancedTab } from "./AdvancedTab";
-import { EnhancementsTab } from "./EnhancementsTab";
+import { LLMModelsTab } from "./LLMModelsTab";
 import { HelpTab } from "./HelpTab";
-import { ModelsTab } from "./ModelsTab";
+import { STTModelsTab } from "./STTModelsTab";
 import { OverviewTab } from "./OverviewTab";
+import { PromptsTab } from "./PromptsTab";
 import { RecordingsTab } from "./RecordingsTab";
 import { SettingsTab } from "./SettingsTab";
 import { AudioUploadSection } from "../sections/AudioUploadSection";
@@ -83,13 +84,18 @@ export function TabContainer({ activeSection }: TabContainerProps) {
         return <SettingsTab />;
 
       case "models":
-        return <ModelsTab />;
+      case "stt-models":
+        return <STTModelsTab />;
 
       case "advanced":
         return <AdvancedTab />;
 
       case "formatting":
-        return <EnhancementsTab />;
+      case "llm-models":
+        return <LLMModelsTab />;
+
+      case "prompts":
+        return <PromptsTab />;
 
       case "help":
         return <HelpTab />;
