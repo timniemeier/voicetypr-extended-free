@@ -1,12 +1,12 @@
 import { useCallback, useEffect } from "react";
 import { toast } from "sonner";
-import { ModelsSection } from "../sections/ModelsSection";
+import { STTModelsSection } from "../sections/STTModelsSection";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useEventCoordinator } from "@/hooks/useEventCoordinator";
 import { useModelManagementContext } from "@/contexts/ModelManagementContext";
 import { AppSettings } from "@/types";
 
-export function ModelsTab() {
+export function STTModelsTab() {
   const { registerEvent } = useEventCoordinator("main");
   const { settings, updateSettings } = useSettings();
 
@@ -76,7 +76,7 @@ export function ModelsTab() {
   }, [registerEvent]);
 
   return (
-    <ModelsSection
+    <STTModelsSection
       models={sortedModels}
       downloadProgress={downloadProgress}
       verifyingModels={verifyingModels}
