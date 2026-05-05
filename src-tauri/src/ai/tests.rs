@@ -687,6 +687,35 @@ mod tests {
     }
 
     #[test]
+    fn test_build_enhancement_prompt_for_active_injects_language_directive() {
+        use crate::ai::prompts::{build_enhancement_prompt_for_active, Prompt, PromptKind};
+
+        // Custom prompt without any language placeholder — directive must
+        // still surface so the model knows the recording's language and
+        // is told to respond in it.
+        let active = Prompt {
+            id: "custom:lang-test".to_string(),
+            kind: PromptKind::Custom,
+            builtin_id: None,
+            name: "Plain rewrite".to_string(),
+            icon: "Pencil".to_string(),
+            prompt_text: "Rewrite the transcript verbatim.".to_string(),
+        };
+        let spanish = build_enhancement_prompt_for_active("hola", None, &active, Some("es"));
+        assert!(
+            spanish.contains("The recording is in Spanish. Respond in Spanish."),
+            "missing language directive in: {spanish}"
+        );
+
+        // Fallback when language is None — defaults to English.
+        let unknown = build_enhancement_prompt_for_active("hi", None, &active, None);
+        assert!(
+            unknown.contains("The recording is in English. Respond in English."),
+            "missing English fallback directive in: {unknown}"
+        );
+    }
+
+    #[test]
     fn test_prompt_library_serde_roundtrip() {
         use crate::ai::prompts::{BuiltinId, Prompt, PromptKind, PromptLibrary};
 

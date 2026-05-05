@@ -463,7 +463,23 @@ pub fn build_enhancement_prompt_for_active(
     language: Option<&str>,
 ) -> String {
     let body = apply_language(active_prompt.prompt_text.as_str(), language);
-    let mut prompt = format!("{}\n\nTranscribed text:\n{}", body, text.trim());
+    let lang_name = language.map(get_language_name).unwrap_or("English");
+    // Auto-injected language directive: tells the model both the source
+    // language of the transcript and that the response must be in the same
+    // language. Always appended, regardless of what the prompt body says,
+    // so users editing custom prompts don't have to remember to handle
+    // language themselves. Mild redundancy with built-ins (which already
+    // mention `{language}` in their base) is acceptable — the directive is
+    // short and the duplication reinforces, rather than confuses, the
+    // model's behavior.
+    let language_directive =
+        format!("The recording is in {lang}. Respond in {lang}.", lang = lang_name);
+    let mut prompt = format!(
+        "{}\n\n{}\n\nTranscribed text:\n{}",
+        body,
+        language_directive,
+        text.trim()
+    );
     if let Some(ctx) = context {
         prompt.push_str(&format!("\n\nContext: {}", ctx));
     }
