@@ -48,11 +48,6 @@ pub fn hide_dock_icon(app: &tauri::AppHandle) {
 }
 
 use audio::recorder::AudioRecorder;
-#[allow(deprecated)]
-use commands::ai::{
-    get_custom_prompts, get_default_prompts, get_enhancement_options, update_custom_prompts,
-    update_enhancement_options,
-};
 use commands::{
     ai::{
         cache_ai_api_key, clear_ai_api_key_cache, create_prompt, delete_prompt,
@@ -1257,11 +1252,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             update_ai_settings,
             enhance_transcription,
             disable_ai_enhancement,
-            get_enhancement_options,
-            update_enhancement_options,
-            get_custom_prompts,
-            update_custom_prompts,
-            get_default_prompts,
             list_prompts,
             get_active_prompt,
             set_active_prompt,

@@ -9,7 +9,6 @@ pub mod openai;
 pub mod prompts;
 
 pub use config::MAX_TEXT_LENGTH;
-#[allow(deprecated)]
 pub use prompts::{CustomPrompts, EnhancementOptions};
 #[allow(unused_imports)]
 pub use prompts::{
@@ -31,7 +30,6 @@ pub struct AIProviderConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(deprecated)]
 pub struct AIEnhancementRequest {
     pub text: String,
     pub context: Option<String>,
