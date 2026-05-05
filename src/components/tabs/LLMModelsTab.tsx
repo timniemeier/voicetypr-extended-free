@@ -1,20 +1,19 @@
 import { useEffect } from "react";
 import { toast } from "sonner";
-import { EnhancementsSection } from "../sections/EnhancementsSection";
+import { LLMModelsSection } from "../sections/LLMModelsSection";
 import { useEventCoordinator } from "@/hooks/useEventCoordinator";
 
-export function EnhancementsTab() {
+export function LLMModelsTab() {
   const { registerEvent } = useEventCoordinator("main");
 
-  // Initialize enhancements tab
+  // Initialize LLM Models tab event handlers
   useEffect(() => {
     const init = async () => {
       try {
-        // Listen for AI enhancement errors
         registerEvent("ai-enhancement-auth-error", (event) => {
           console.error("AI authentication error:", event.payload);
           toast.error(event.payload as string, {
-            description: "Please update your API key in the Formatting section",
+            description: "Please update your API key in the LLM Models section",
           });
         });
 
@@ -23,12 +22,12 @@ export function EnhancementsTab() {
           toast.warning(event.payload as string);
         });
       } catch (error) {
-        console.error("Failed to initialize enhancements tab:", error);
+        console.error("Failed to initialize LLM Models tab:", error);
       }
     };
 
     init();
   }, [registerEvent]);
 
-  return <EnhancementsSection />;
+  return <LLMModelsSection />;
 }

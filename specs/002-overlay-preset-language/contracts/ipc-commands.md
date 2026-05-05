@@ -11,8 +11,15 @@ are net new on the IPC boundary.
 |----------------------------------|---------------------|
 | `get_settings()`                 | Frontend reads new fields (`enabled_languages`, `cycle_preset_hotkey`, etc.) on app boot. |
 | `set_settings(settings)`         | Frontend writes new fields when user updates Models / GeneralSettings. Backend validates `enabled_languages` non-empty + `language ∈ enabled_languages`. |
-| `get_enhancement_options()`      | Frontend reads active preset on app boot. |
-| `update_enhancement_options(opts)` | Frontend writes new preset value when the Enhancements UI changes it. The cycle-preset Rust handler also writes via this same code path internally. |
+| `get_active_prompt()`            | Frontend (`RecordingPill`) reads the active prompt on app boot to seed the preset bubble's label. Returns the full `Prompt` shape: `{ id, kind, builtin_id?, name, icon, prompt_text }`. |
+| `set_active_prompt(id)`          | Frontend (`PromptsSection`) writes the new active id when the user picks a different prompt. The cycle-preset Rust handler **also** writes via this same code path internally. Returns the new id on success. |
+
+The cycle-preset Rust handler binds to **`get_active_prompt`** (not the
+deprecated `get_enhancement_options`) per spec.md § Clarifications
+session 2026-05-05 (FU-2 Option B). The legacy
+`get_enhancement_options` / `update_enhancement_options` commands
+remain registered for one release post-003 for forward-compat with
+older frontend builds, but this feature does not call them.
 
 ### No new commands
 
@@ -29,7 +36,7 @@ breaking changes.)
 
 | Event name                  | Payload                                                       | Emitted when |
 |-----------------------------|---------------------------------------------------------------|--------------|
-| `active-preset-changed`     | `{ "preset": "Default" \| "Prompts" \| "Email" \| "Commit" }` | After the cycle-preset hotkey writes the new preset to the `ai` store. |
+| `active-prompt-changed`     | `{ "id": "<prompt-id>", "label": "<human-readable>" }`        | After the cycle-preset hotkey writes the new `active_prompt_id` to the `prompts` store. For the four built-ins the label is one of `"Default" \| "Prompts" \| "Email" \| "Commit"`; if a future feature widens the cycle to custom prompts, the label is the prompt's `name`. The frontend overlay (`RecordingPill`) and the Prompts tab (`usePromptLibrary`) both listen. |
 | `active-language-changed`   | `{ "language": "<iso-639-1>" }`                               | After the cycle-language hotkey writes the new active language to the `settings` store. |
 | `cycle-language-noop`       | `{ "reason": "single_language" \| "english_only_model" }`     | When the cycle-language hotkey fires but the cycle is gated. Frontend renders a non-disruptive toast. |
 
@@ -94,10 +101,11 @@ Result: zero behavior change on first launch (SC-006).
 |-------------------------------|------------------------------|-----------------|
 | `Settings` serde round-trip    | `src-tauri/src/tests/settings_commands.rs` (extend) | New fields default correctly; round-trip `["en", "de"]` survives serialize/deserialize; missing-field defaults match `Default`. |
 | `set_settings` validation      | Same file (extend)           | Empty `enabled_languages` resets to `["en"]`; `language` not in `enabled_languages` resets to `enabled_languages[0]`. |
-| Global-shortcut dispatch       | New unit test or integration via `#[cfg(test)]` of `handle_global_shortcut` | `Action::CyclePreset` advances Default → Prompts; `Action::CycleLanguage` cycles `[en, de, fr]`. |
+| Cycle-prompt pure helper       | `src-tauri/src/recording/cycle_actions.rs` (in-module `#[cfg(test)] mod tests`) + `src-tauri/src/tests/cycle_actions.rs` | `next_active_prompt_id("builtin:default") == "builtin:prompts"`; full 4-step cycle wraps; custom-id input falls back to `builtin:default`; canonical-order helper matches the four built-ins. |
+| Cycle-language pure helper     | Same as above              | `next_language` advances through `[en, de, fr]` with wrap; single-entry → `SingleLanguageNoop`; `*.en` model → `EnglishOnlyModelNoop`; unknown current wraps to first. |
 | English-only gate              | New test                     | With `current_model = "ggml-base.en"` and `enabled_languages = ["en", "de"]`, cycle-language emits `cycle-language-noop { english_only_model }` and `Settings.language` stays `en`. |
 | `RecordingPill` render         | `src/components/RecordingPill.test.tsx` (extend) | Renders preset label when `pill_show_preset`; renders ISO code when `pill_show_language`; layout switches between row and col; `forceShow` flashes for 1.5 s when mode is `never` and a cycle event fires. |
-| Multi-select `LanguageSelection` | `src/components/sections/__tests__/ModelsSection.languages.test.tsx` (new) | Adding/removing entries; toggling active marker; collapse-to-single-row at n=1; English-only model disables non-EN entries. |
+| Multi-select `LanguageSelection` | `src/components/sections/__tests__/STTModelsSection.languages.test.tsx` (new; renamed by 003 `ModelsSection → STTModelsSection`) | Adding/removing entries; toggling active marker; collapse-to-single-row at n=1; English-only model disables non-EN entries. |
 | `GeneralSettings` new rows     | `src/components/sections/__tests__/GeneralSettings.recording-indicator.test.tsx` (extend) | Two cycle-hotkey rows, `pill_show_preset` / `pill_show_language` toggles, layout radio. |
 
 ## Non-goals (explicit)

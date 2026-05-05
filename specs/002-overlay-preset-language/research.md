@@ -1,34 +1,64 @@
 # Phase 0 Research: Overlay Preset & Language Toggles
 
 This document resolves every open technical question for the feature
-before Phase 1 (data model + contracts). All four spec-level
-clarifications are already locked in `spec.md` § Clarifications;
-this file covers the *technical* unknowns that surfaced while writing
-the plan.
+before Phase 1 (data model + contracts). All five spec-level
+clarifications are locked in `spec.md` § Clarifications (two sessions:
+2026-05-04 + 2026-05-05); this file covers the *technical* unknowns
+that surfaced while writing the plan.
 
-## R-001: Where does the active formatting preset already persist, and is reuse the right call?
+## R-001: Where does the active formatting prompt persist after spec 003, and how does the cycler write to it?
 
-- **Decision**: Reuse the existing `update_enhancement_options` /
-  `get_enhancement_options` Tauri commands and the `ai` store they
-  back. Cycling preset writes to the same store the Enhancements UI
-  writes to.
-- **Rationale**: A separate "active preset" field on `Settings` would
-  duplicate state and create two sources of truth. The
-  Enhancements UI already drives `enhancement_options.preset` (see
-  `src/components/sections/EnhancementsSection.tsx` and
-  `src-tauri/src/ai/prompts.rs::EnhancementOptions`); the cycle
-  hotkey just becomes a second writer of the same field. This
-  satisfies FR-001 ("active preset is first-class state distinct
-  from the Enhancements UI selection — both surfaces stay in sync")
-  with no schema change.
+- **Decision**: Reuse the new prompt-library Tauri commands
+  `get_active_prompt` / `set_active_prompt` (introduced in spec 003).
+  The cycler operates on the persisted **`active_prompt_id` string**
+  directly — per `specs/003-settings-tab-restructure/follow-ups.md`
+  § FU-2 **Option B**, ratified in `spec.md` § Clarifications session
+  2026-05-05.
+- **Rationale**: Spec 003 unified built-in formatting presets and
+  user-authored custom prompts under a single `prompts` store with a
+  single "active" surface (`active_prompt_id: string`). The cycle
+  hotkey becomes a second writer of that same field, exactly as it
+  was a second writer of `enhancement_options.preset` pre-003. This
+  preserves the FR-001 single-source-of-truth promise post-003 and
+  avoids carrying a permanent enum-vs-id shim. The cycle ring stays
+  the four built-ins (`builtin:default → builtin:prompts →
+  builtin:email → builtin:commit → wrap`); custom prompts are
+  intentionally excluded for this feature so a user pressing the
+  cycle hotkey while parked on a custom prompt jumps to
+  `builtin:default` (slot 0).
 - **Alternatives considered**:
-  - *Add `Settings.active_preset` and dual-write* — rejected. Two
-    sources of truth, drift inevitable.
-  - *Add a Settings field and migrate the Enhancements UI to it* —
-    rejected. Larger upstream-divergence diff, breaks the
-    "minimum touch" Constitution I objective. The existing AI store
-    is already wired through `useReadinessState` and consumed by the
-    formatting pipeline; piggybacking is the small-diff path.
+  - *Option A — Thin shim: keep cycler reading/writing the legacy
+    `EnhancementPreset` enum, translate enum ↔ id for built-ins on
+    every read/write* — rejected. Two parallel "active" surfaces
+    create drift risk; the cycler is permanently 4-built-ins-only
+    even if a future feature would benefit from custom-prompt
+    cycling. Smaller 002 diff but larger long-term cost.
+  - *Add `Settings.active_preset` and dual-write* — rejected (still
+    rejected pre-003 too). Three sources of truth, drift inevitable.
+  - *Widen the cycle ring to all prompts (built-ins + custom)* —
+    rejected for this feature. Would require additional UX
+    decisions (ordering, opt-in per prompt, an "in cycle?" badge in
+    the Prompts tab); legitimately a future feature concern.
+
+  **Implementation specifics of Option B**:
+    - Pure helper `cycle_actions::next_active_prompt_id(current: &str) -> String`
+      walks the canonical built-in order. Falls back to
+      `builtin:default` for any non-built-in input (custom id, empty
+      string, garbage).
+    - The Rust dispatch in `recording/hotkeys.rs::handle_cycle_preset_shortcut`
+      reads `crate::commands::ai::get_active_prompt`, advances via
+      `next_active_prompt_id`, persists via `set_active_prompt`, and
+      emits `active-prompt-changed { id, label }` (a renamed
+      replacement for the never-shipped `active-preset-changed`).
+    - The frontend overlay (`RecordingPill`) seeds its label from
+      `get_active_prompt` on mount and listens for
+      `active-prompt-changed` to update. Built-in ids resolve to
+      canonical labels via the `BUILTIN_LABELS` map; if a custom
+      prompt ever ends up active mid-session (set from the Prompts
+      tab), the pill renders the prompt's `name` field.
+    - The Prompts tab's `usePromptLibrary` hook also listens for
+      `active-prompt-changed` so the active-dot stays in sync when
+      the cycle hotkey is pressed while the tab is open.
 
 ## R-002: How should the new global shortcuts be registered alongside the existing dictation + PTT hotkeys?
 

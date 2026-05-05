@@ -103,6 +103,7 @@ pnpm typecheck    # Run TypeScript compiler
 - Global hotkey support
 
 📝 **Recent Updates**:
+- Settings sidebar restructured: Prompts tab (new), Formatting → LLM Models, Models → STT Models. See `specs/003-settings-tab-restructure/`.
 - Parakeet Swift integration complete (see `PARAKEET_SWIFT_INTEGRATION.md`)
 - Native Apple Neural Engine support for **macOS only** (see `PARAKEET_MACOS_ONLY_FIX.md`)
 - Automated sidecar build via `build.rs`

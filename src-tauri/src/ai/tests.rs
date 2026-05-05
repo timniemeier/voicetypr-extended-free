@@ -1,4 +1,5 @@
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::super::*;
     use std::collections::HashMap;
@@ -21,6 +22,7 @@ mod tests {
         let request = AIEnhancementRequest {
             text: "".to_string(),
             context: None,
+            active_prompt: None,
             options: None,
             language: None,
             custom_prompts: None,
@@ -31,6 +33,7 @@ mod tests {
         let request = AIEnhancementRequest {
             text: "   \n\t  ".to_string(),
             context: None,
+            active_prompt: None,
             options: None,
             language: None,
             custom_prompts: None,
@@ -41,6 +44,7 @@ mod tests {
         let request = AIEnhancementRequest {
             text: "Hello, world!".to_string(),
             context: None,
+            active_prompt: None,
             options: None,
             language: None,
             custom_prompts: None,
@@ -51,6 +55,7 @@ mod tests {
         let request = AIEnhancementRequest {
             text: "a".repeat(MAX_TEXT_LENGTH),
             context: None,
+            active_prompt: None,
             options: None,
             language: None,
             custom_prompts: None,
@@ -61,6 +66,7 @@ mod tests {
         let request = AIEnhancementRequest {
             text: "a".repeat(MAX_TEXT_LENGTH + 1),
             context: None,
+            active_prompt: None,
             options: None,
             language: None,
             custom_prompts: None,
@@ -606,5 +612,137 @@ mod tests {
         // None defaults to English
         let prompt_none = build_enhancement_prompt(text, None, &options, None, &custom);
         assert!(prompt_none.contains("written English"));
+    }
+
+    // ---- New prompt-library coverage (T015 / T016) ----
+
+    #[test]
+    fn test_build_enhancement_prompt_for_active_builtin_email() {
+        use crate::ai::prompts::{
+            build_enhancement_prompt_for_active, BuiltinId, Prompt, PromptKind,
+            BUILTIN_PROMPT_DEFAULTS,
+        };
+
+        // Built-ins ship with the base post-processor template baked into
+        // `prompt_text` (see Issue #8). The resolver no longer prepends the
+        // base — `prompt_text` IS the prompt sent to the AI.
+        let shipped = BUILTIN_PROMPT_DEFAULTS
+            .get(&BuiltinId::Email)
+            .unwrap()
+            .prompt_text();
+        let active = Prompt {
+            id: "builtin:email".to_string(),
+            kind: PromptKind::Builtin,
+            builtin_id: Some(BuiltinId::Email),
+            name: "Email".to_string(),
+            icon: "Mail".to_string(),
+            prompt_text: shipped,
+        };
+        let out = build_enhancement_prompt_for_active("hi mary", None, &active, Some("en"));
+        assert!(out.contains("post-processor for voice transcripts"));
+        assert!(out.contains("written English"));
+        assert!(out.contains("format the cleaned text as an email"));
+        assert!(out.contains("hi mary"));
+    }
+
+    #[test]
+    fn test_default_builtin_ships_base_template_no_duplication() {
+        use crate::ai::prompts::{
+            build_enhancement_prompt_for_active, BuiltinId, BUILTIN_PROMPT_DEFAULTS,
+        };
+
+        // Issue #8 regression guard: Default's shipped prompt_text must be
+        // non-empty (passes FR-013a validation) and resolving the prompt must
+        // not duplicate the base post-processor preamble.
+        let default = BUILTIN_PROMPT_DEFAULTS.get(&BuiltinId::Default).unwrap();
+        let shipped = default.prompt_text();
+        assert!(!shipped.trim().is_empty(), "Default must ship non-empty prompt_text");
+
+        let active = default.to_prompt();
+        let out = build_enhancement_prompt_for_active("hello world", None, &active, Some("en"));
+        // Exactly one occurrence of the base preamble in the resolved prompt.
+        let count = out.matches("post-processor for voice transcripts").count();
+        assert_eq!(count, 1, "base preamble must appear exactly once, got {}", count);
+        assert!(out.contains("written English"));
+        assert!(out.contains("hello world"));
+    }
+
+    #[test]
+    fn test_build_enhancement_prompt_for_active_custom_replaces_base() {
+        use crate::ai::prompts::{build_enhancement_prompt_for_active, Prompt, PromptKind};
+
+        let active = Prompt {
+            id: "custom:abc".to_string(),
+            kind: PromptKind::Custom,
+            builtin_id: None,
+            name: "Slack reply".to_string(),
+            icon: "MessageSquare".to_string(),
+            prompt_text: "Rewrite in {language} as a casual Slack reply.".to_string(),
+        };
+        let out = build_enhancement_prompt_for_active("ack", None, &active, Some("es"));
+        // Custom path skips the shared base.
+        assert!(!out.contains("post-processor for voice transcripts"));
+        assert!(out.contains("Rewrite in Spanish as a casual Slack reply."));
+        assert!(out.contains("ack"));
+    }
+
+    #[test]
+    fn test_prompt_library_serde_roundtrip() {
+        use crate::ai::prompts::{BuiltinId, Prompt, PromptKind, PromptLibrary};
+
+        let original = PromptLibrary {
+            version: 1,
+            active_prompt_id: "custom:abc".to_string(),
+            prompts: vec![
+                Prompt {
+                    id: "builtin:default".to_string(),
+                    kind: PromptKind::Builtin,
+                    builtin_id: Some(BuiltinId::Default),
+                    name: "Default".to_string(),
+                    icon: "FileText".to_string(),
+                    prompt_text: "".to_string(),
+                },
+                Prompt {
+                    id: "custom:abc".to_string(),
+                    kind: PromptKind::Custom,
+                    builtin_id: None,
+                    name: "X".to_string(),
+                    icon: "Sparkles".to_string(),
+                    prompt_text: "Y".to_string(),
+                },
+            ],
+        };
+
+        let value = serde_json::to_value(&original).expect("serialize");
+        let roundtripped: PromptLibrary =
+            serde_json::from_value(value).expect("deserialize");
+        assert_eq!(roundtripped, original);
+    }
+
+    #[test]
+    fn test_validate_prompt_fields_rejection_paths() {
+        use crate::ai::prompts::{validate_prompt_fields, MAX_PROMPT_NAME_LEN};
+
+        // Empty name
+        assert!(validate_prompt_fields("", "FileText", "ok").is_err());
+        assert!(validate_prompt_fields("   ", "FileText", "ok").is_err());
+
+        // Long name
+        let long = "x".repeat(MAX_PROMPT_NAME_LEN + 1);
+        assert!(validate_prompt_fields(&long, "FileText", "ok").is_err());
+
+        // Invalid icon
+        assert!(validate_prompt_fields("ok", "BogusIcon", "ok").is_err());
+
+        // Empty / whitespace prompt_text
+        assert!(validate_prompt_fields("ok", "FileText", "").is_err());
+        assert!(validate_prompt_fields("ok", "FileText", "  \n\t").is_err());
+
+        // Oversize prompt_text
+        let huge = "a".repeat(8193);
+        assert!(validate_prompt_fields("ok", "FileText", &huge).is_err());
+
+        // Happy path
+        assert!(validate_prompt_fields("Ok name", "FileText", "body").is_ok());
     }
 }

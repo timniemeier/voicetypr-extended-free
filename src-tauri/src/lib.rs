@@ -19,6 +19,7 @@ mod ffmpeg;
 mod license;
 mod media;
 mod menu;
+mod migrations;
 mod parakeet;
 mod recognition;
 mod recording;
@@ -47,13 +48,18 @@ pub fn hide_dock_icon(app: &tauri::AppHandle) {
 }
 
 use audio::recorder::AudioRecorder;
+#[allow(deprecated)]
+use commands::ai::{
+    get_custom_prompts, get_default_prompts, get_enhancement_options, update_custom_prompts,
+    update_enhancement_options,
+};
 use commands::{
     ai::{
-        cache_ai_api_key, clear_ai_api_key_cache, disable_ai_enhancement, enhance_transcription,
-        get_ai_settings, get_ai_settings_for_provider, get_custom_prompts, get_default_prompts,
-        get_enhancement_options, get_openai_config, list_provider_models, set_openai_config,
-        test_openai_endpoint, update_ai_settings, update_custom_prompts, update_enhancement_options,
-        validate_and_cache_api_key,
+        cache_ai_api_key, clear_ai_api_key_cache, create_prompt, delete_prompt,
+        disable_ai_enhancement, enhance_transcription, get_active_prompt, get_ai_settings,
+        get_ai_settings_for_provider, get_openai_config, list_prompts, list_provider_models,
+        reset_prompt_to_default, set_active_prompt, set_openai_config, test_openai_endpoint,
+        update_ai_settings, update_prompt, validate_and_cache_api_key,
     },
     audio::*,
     clipboard::{copy_image_to_clipboard, save_image_to_file},
@@ -369,6 +375,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             let app_state = app.state::<AppState>();
             let window_manager = WindowManager::new(app.app_handle().clone());
             app_state.set_window_manager(window_manager);
+
+            // Run one-shot migrations (idempotent). Must happen before any
+            // window mounts so the new prompt library is in place when the
+            // frontend reads it.
+            if let Err(e) = crate::migrations::run_all_migrations(&app.handle().clone()) {
+                log::warn!("Migrations reported error: {}", e);
+            }
 
             // Warm AI API key cache from secure store BEFORE startup checks run.
             // This ensures persisted credentials are visible to perform_startup_checks()
@@ -1249,6 +1262,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             get_custom_prompts,
             update_custom_prompts,
             get_default_prompts,
+            list_prompts,
+            get_active_prompt,
+            set_active_prompt,
+            create_prompt,
+            update_prompt,
+            delete_prompt,
+            reset_prompt_to_default,
             list_provider_models,
             keyring_set,
             keyring_get,

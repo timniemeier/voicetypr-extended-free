@@ -138,8 +138,9 @@ implementing it. Times reference the success criteria in `spec.md`.
 ```bash
 pnpm typecheck
 pnpm lint
-pnpm test                  # vitest — RecordingPill, ModelsSection, GeneralSettings tests
-cd src-tauri && cargo test # backend serde + cycle action tests
+pnpm test --run            # vitest — RecordingPill, STTModelsSection, GeneralSettings tests
+PATH="$HOME/.cargo/bin:$PATH" cargo test --lib --manifest-path src-tauri/Cargo.toml
+                           # backend serde + cycle action tests
 ```
 
 All of these MUST pass before merging (Constitution Principle IV).
@@ -154,12 +155,13 @@ All of these MUST pass before merging (Constitution Principle IV).
   service). Pick a different binding.
 - **Overlay doesn't update on cycle**: Confirm the frontend listener
   is mounted — `RecordingPill.tsx` should subscribe to
-  `active-preset-changed`, `active-language-changed`, and
+  `active-prompt-changed`, `active-language-changed`, and
   `language-changed`. The latter fires whenever any code path mutates
   `Settings.language`, so removing it would make the cycle event the
   only refresh path and miss the existing English-fallback path.
-- **Preset cycle desyncs from Enhancements UI**: Both surfaces must
-  read from `enhancement_options.preset` in the `ai` store. If the
-  Enhancements UI shows `Email` but the overlay shows `Default`, one
-  side is reading from a stale local state — re-check the
-  `update_enhancement_options` writer / event listener pairing.
+- **Preset cycle desyncs from the Prompts tab**: Both surfaces must
+  read from `active_prompt_id` in the `prompts` store. If the
+  Prompts tab shows `Email` selected but the overlay shows `Default`,
+  one side is reading from a stale local state — re-check the
+  `set_active_prompt` writer / `active-prompt-changed` listener
+  pairing in `usePromptLibrary.ts` and `RecordingPill.tsx`.

@@ -9,7 +9,12 @@ pub mod openai;
 pub mod prompts;
 
 pub use config::MAX_TEXT_LENGTH;
+#[allow(deprecated)]
 pub use prompts::{CustomPrompts, EnhancementOptions};
+#[allow(unused_imports)]
+pub use prompts::{
+    BuiltinId, Prompt, PromptKind, PromptLibrary, BUILTIN_PROMPT_DEFAULTS, BUILTIN_DEFAULT_ID,
+};
 
 #[cfg(test)]
 mod tests;
@@ -26,16 +31,23 @@ pub struct AIProviderConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(deprecated)]
 pub struct AIEnhancementRequest {
     pub text: String,
     pub context: Option<String>,
+    /// Resolved active prompt (preferred). When `Some`, providers route through
+    /// `build_enhancement_prompt_for_active` and ignore `options`/`custom_prompts`.
+    #[serde(default)]
+    pub active_prompt: Option<Prompt>,
+    /// Legacy: pre-prompts-restructure preset selector. Honored only when
+    /// `active_prompt` is `None`.
     #[serde(default)]
     pub options: Option<EnhancementOptions>,
     /// ISO 639-1 language code for output language (e.g., "en", "es", "fr")
     #[serde(default)]
     pub language: Option<String>,
-    /// User-supplied prompt overrides. `None` or per-field `None`/empty falls back to
-    /// the shipped defaults.
+    /// Legacy user-supplied prompt overrides. Honored only when `active_prompt`
+    /// is `None`.
     #[serde(default)]
     pub custom_prompts: Option<CustomPrompts>,
 }

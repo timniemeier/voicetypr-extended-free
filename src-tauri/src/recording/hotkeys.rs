@@ -2,7 +2,7 @@ use crate::commands::audio::{
     start_recording, stop_recording, RecorderState, PTT_START_ABORTED_AFTER_RELEASE,
 };
 use crate::recording::cycle_actions::{
-    next_language, next_preset, preset_label, LanguageCycleOutcome,
+    builtin_label, next_active_prompt_id, next_language, LanguageCycleOutcome,
 };
 use crate::recording::escape_handler::handle_escape_key_press;
 use crate::{get_recording_state, update_recording_state, AppState, RecordingMode, RecordingState};
@@ -109,40 +109,44 @@ pub fn handle_global_shortcut(
     }
 }
 
-/// Cycle the active formatting preset forward one step and emit
-/// `active-preset-changed { preset }` so the overlay (and the Enhancements UI)
-/// can stay in sync. Reuses the existing `get_enhancement_options` /
-/// `update_enhancement_options` code path so there is one source of truth.
+/// Cycle the active formatting prompt forward one step (per spec 002 — US1
+/// + 003 FU-2 Option B). Operates on `active_prompt_id` strings via the
+/// prompt-library Tauri commands so there is one source of truth.
+///
+/// The cycle ring is the four built-ins in canonical order:
+/// `builtin:default → builtin:prompts → builtin:email → builtin:commit → wrap`.
+/// Custom prompts are intentionally NOT in the cycle for this feature.
+///
+/// Emits `active-prompt-changed { id, label }` so the overlay and the
+/// Prompts tab can stay in sync.
 fn handle_cycle_preset_shortcut(app: &tauri::AppHandle) {
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        let current = match crate::commands::ai::get_enhancement_options(app_handle.clone()).await {
-            Ok(options) => options,
+        let current = match crate::commands::ai::get_active_prompt(app_handle.clone()).await {
+            Ok(prompt) => prompt,
             Err(e) => {
-                log::warn!("cycle-preset: failed to read enhancement options: {}", e);
+                log::warn!("cycle-preset: failed to read active prompt: {}", e);
                 return;
             }
         };
 
-        let next = crate::ai::prompts::EnhancementOptions {
-            preset: next_preset(&current.preset),
-        };
-        let label = preset_label(&next.preset).to_string();
+        let next_id = next_active_prompt_id(&current.id);
+        let label = builtin_label(&next_id).unwrap_or("Default").to_string();
 
         if let Err(e) =
-            crate::commands::ai::update_enhancement_options(next, app_handle.clone()).await
+            crate::commands::ai::set_active_prompt(app_handle.clone(), next_id.clone()).await
         {
-            log::warn!("cycle-preset: failed to persist next preset: {}", e);
+            log::warn!("cycle-preset: failed to persist next prompt: {}", e);
             return;
         }
 
         if let Err(e) = app_handle.emit(
-            "active-preset-changed",
-            serde_json::json!({ "preset": label }),
+            "active-prompt-changed",
+            serde_json::json!({ "id": next_id, "label": label }),
         ) {
-            log::warn!("cycle-preset: failed to emit active-preset-changed: {}", e);
+            log::warn!("cycle-preset: failed to emit active-prompt-changed: {}", e);
         } else {
-            log::info!("cycle-preset: advanced to {}", label);
+            log::info!("cycle-preset: advanced to {} ({})", next_id, label);
         }
     });
 }

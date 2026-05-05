@@ -8,7 +8,17 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 type PillState = "idle" | "listening" | "transcribing" | "formatting";
-type EnhancementPreset = "Default" | "Prompts" | "Email" | "Commit";
+
+// Built-in prompt id → display label. Spec 003 introduced custom prompts;
+// only the four built-ins participate in the cycle hotkey ring (per spec
+// 002 US1 + 003 FU-2 Option B), but a user can park on a custom prompt
+// from the Prompts tab — when that happens, we display the prompt's `name`.
+const BUILTIN_LABELS: Record<string, string> = {
+  "builtin:default": "Default",
+  "builtin:prompts": "Prompts",
+  "builtin:email": "Email",
+  "builtin:commit": "Commit",
+};
 
 // Duration of the "flash" the overlay does when a cycle event arrives while
 // `pill_indicator_mode === "never"`. Per spec FR-008 + SC-004 the pill should
@@ -29,7 +39,9 @@ export function RecordingPill() {
     useSetting("pill_extras_layout") ?? "right";
   const settingsLanguage = useSetting("language") ?? "en";
 
-  const [activePreset, setActivePreset] = useState<EnhancementPreset>("Default");
+  // The active formatting prompt — spec 003 unified built-ins and custom
+  // prompts under a single `active_prompt_id` (string) + display `label`.
+  const [activePresetLabel, setActivePresetLabel] = useState<string>("Default");
   const [activeLanguage, setActiveLanguage] = useState<string>(settingsLanguage);
   const [forceShow, setForceShow] = useState(false);
   const forceShowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -115,16 +127,17 @@ export function RecordingPill() {
     };
   }, []);
 
-  // Seed the active preset on mount so the label is correct before the first
-  // cycle event arrives. Uses the same source of truth as the Enhancements UI
-  // (the `ai` store via `get_enhancement_options`).
+  // Seed the active preset label on mount so it's correct before the first
+  // cycle event arrives. Uses the prompt-library Tauri command introduced
+  // by spec 003 (`get_active_prompt`). Built-in ids resolve to canonical
+  // display labels; custom prompts use the user-supplied `name` field.
   useEffect(() => {
     let cancelled = false;
-    invoke<{ preset: EnhancementPreset }>("get_enhancement_options")
-      .then((options) => {
-        if (!cancelled && options?.preset) {
-          setActivePreset(options.preset);
-        }
+    invoke<{ id: string; name: string }>("get_active_prompt")
+      .then((prompt) => {
+        if (cancelled || !prompt?.id) return;
+        const label = BUILTIN_LABELS[prompt.id] ?? prompt.name ?? "Default";
+        setActivePresetLabel(label);
       })
       .catch(() => {
         // Silent: the label simply stays at the current default until a
@@ -158,10 +171,12 @@ export function RecordingPill() {
     };
 
     const subscriptions: Array<Promise<() => void>> = [
-      listen<{ preset: EnhancementPreset }>("active-preset-changed", (event) => {
+      listen<{ id: string; label?: string }>("active-prompt-changed", (event) => {
         if (!isMounted) return;
-        if (event.payload?.preset) {
-          setActivePreset(event.payload.preset);
+        const id = event.payload?.id;
+        if (id) {
+          const label = BUILTIN_LABELS[id] ?? event.payload?.label ?? "Default";
+          setActivePresetLabel(label);
         }
         flash();
       }),
@@ -270,7 +285,7 @@ export function RecordingPill() {
             data-testid="pill-preset-bubble"
           >
             <span className={labelClass} data-testid="pill-preset-label">
-              {activePreset}
+              {activePresetLabel}
             </span>
           </div>
         )}

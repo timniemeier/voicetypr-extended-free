@@ -1,3 +1,29 @@
+## Unreleased — fork (`voicetypr-extended-free`)
+
+### Features
+
+- **prompts:** New first-class **Prompts** tab in the settings sidebar. Two-pane layout with a search + grouped list (Built-in: Default / Prompts / Email / Commit; Custom: user-created) on the left and a name + icon + prompt-text editor on the right. Auto-saves edits 500ms after the last keystroke. The active prompt is shown by an orange dot, decoupled from row selection (clicking a row only opens it for editing — explicit "Set as active" affordance moves the dot). Custom prompts can be created (name + 16-icon picker + prompt text) and deleted; deleting the active custom prompt falls back to Default automatically. See `specs/003-settings-tab-restructure/`.
+- **settings sidebar:** **Formatting** renamed to **LLM Models**, **Models** renamed to **STT Models**. The LLM Models tab now hosts only the AI provider list, the master AI Formatting toggle, and the Setup Guide — no preset picker, no Custom Prompts (Advanced) collapsible (both functions are now in the Prompts tab). The STT Models tab is functionally identical to the prior Models tab; only the label and subtitle changed.
+- **backend (Tauri cmds):** Seven new prompt-library commands — `list_prompts`, `get_active_prompt`, `set_active_prompt`, `create_prompt`, `update_prompt`, `delete_prompt`, `reset_prompt_to_default`. Persisted under a new `prompts` store key (`{ version: 1, active_prompt_id, prompts: [...] }`). Atomic read-modify-write per mutation.
+- **migration:** One-shot migration on first post-upgrade launch translates `enhancement_options.preset` + `custom_prompts.{prompts,email,commit}` into the new library shape. Idempotent (skips when `prompts.version >= 1`). Legacy keys (`enhancement_options`, `custom_prompts`) are retained read-only for forensics.
+
+### Breaking changes (user-facing)
+
+- **Active-prompt selector moved.** Previously the four-pill picker (Default / Prompts / Email / Commit) lived inside the Formatting tab. It now lives in the Prompts tab as the orange "active" dot, set via "Set as active". Functionally equivalent; the location is what changed.
+- **`custom_prompts.base` override is dropped.** The new model has no separate base template — each built-in carries its full prompt text. Users who previously customized only the `base` field need to re-author that intent inside the four built-ins. `custom_prompts.{prompts,email,commit}` are migrated automatically. The legacy key remains in the store for forensic recovery; new code never reads it.
+
+### Deprecations
+
+- The Tauri commands `get_enhancement_options`, `update_enhancement_options`, `get_custom_prompts`, `update_custom_prompts`, `get_default_prompts` are marked `#[deprecated]` but remain registered for one release window. Removal target: the release after the one shipping this restructure.
+- The TypeScript types `EnhancementOptions`, `CustomPrompts`, `EnhancementPreset`, and the helpers `toBackendOptions` / `fromBackendOptions` are JSDoc-tagged `@deprecated`. Same removal target.
+
+### Follow-ups (not done in this release)
+
+- **FU-1 — Legacy store-key cleanup.** The `enhancement_options` and `custom_prompts` keys currently linger in the store post-migration for forensic recovery. Once we have one stable release behind us, drop them in a second pass. Tracked in `specs/003-settings-tab-restructure/follow-ups.md`.
+- **FU-2 — Feature-002 cycler integration.** The hotkey-driven preset cycler (in-flight on a separate branch) needs to read/write `active_prompt_id` directly instead of the legacy enum. Contract pinned: `active_prompt_id == "builtin:" + lowercase(EnhancementPreset)` for built-ins. Tracked in `specs/003-settings-tab-restructure/follow-ups.md`.
+
+---
+
 ## [1.12.3](https://github.com/moinulmoin/voicetypr/compare/v1.12.2...v1.12.3) (2026-04-29)
 
 ### Features

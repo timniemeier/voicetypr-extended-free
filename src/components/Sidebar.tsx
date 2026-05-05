@@ -15,6 +15,7 @@ import {
   Home,
   Info,
   Layers,
+  Mic,
   Settings2,
   Sparkles,
   Bug,
@@ -32,8 +33,9 @@ const mainSections = [
   { id: "recordings", label: "History", icon: Clock },
   { id: "audio", label: "Upload", icon: FileAudio },
   { id: "general", label: "Settings", icon: Settings2 },
-  { id: "models", label: "Models", icon: Cpu },
-  { id: "formatting", label: "Formatting", icon: Sparkles },
+  { id: "stt-models", label: "STT Models", icon: Mic },
+  { id: "prompts", label: "Prompts", icon: Sparkles },
+  { id: "llm-models", label: "LLM Models", icon: Cpu },
   { id: "about", label: "About", icon: Info },
 ];
 

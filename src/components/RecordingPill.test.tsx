@@ -39,7 +39,16 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn().mockResolvedValue({ preset: 'Default' })
+  // Spec 003 replaced `get_enhancement_options { preset }` with
+  // `get_active_prompt { id, name, ... }`. The pill seeds its label from
+  // this response on mount.
+  invoke: vi.fn().mockResolvedValue({
+    id: 'builtin:default',
+    name: 'Default',
+    icon: 'FileText',
+    prompt_text: '',
+    kind: 'builtin',
+  })
 }));
 
 const flushAsync = () => act(() => Promise.resolve());
@@ -103,15 +112,15 @@ describe('RecordingPill', () => {
     expect(screen.queryByTestId('pill-preset-label')).not.toBeInTheDocument();
   });
 
-  it('renders the preset label when pill_show_preset is true and updates on active-preset-changed', async () => {
+  it('renders the preset label when pill_show_preset is true and updates on active-prompt-changed', async () => {
     mockSettings.pill_indicator_mode = 'always';
     mockSettings.pill_show_preset = true;
     render(<RecordingPill />);
-    // Wait for the seeded `get_enhancement_options` invoke to resolve.
+    // Wait for the seeded `get_active_prompt` invoke to resolve.
     await flushAsync();
     expect(screen.getByTestId('pill-preset-label')).toHaveTextContent('Default');
 
-    await fireEvent('active-preset-changed', { preset: 'Email' });
+    await fireEvent('active-prompt-changed', { id: 'builtin:email', label: 'Email' });
     expect(screen.getByTestId('pill-preset-label')).toHaveTextContent('Email');
   });
 
@@ -124,7 +133,7 @@ describe('RecordingPill', () => {
     // queued on the real clock and `vi.advanceTimersByTime` cannot clear it).
     vi.useFakeTimers();
     render(<RecordingPill />);
-    // Let the seeded `get_enhancement_options` invoke and the `listen()`
+    // Let the seeded `get_active_prompt` invoke and the `listen()`
     // registrations settle before we fire any backend events. Both resolve
     // via microtasks, so flush the microtask queue under fake timers.
     await act(async () => {
@@ -132,7 +141,7 @@ describe('RecordingPill', () => {
     });
     expect(screen.queryByTestId('audio-dots')).not.toBeInTheDocument();
 
-    await fireEvent('active-preset-changed', { preset: 'Prompts' });
+    await fireEvent('active-prompt-changed', { id: 'builtin:prompts', label: 'Prompts' });
     expect(screen.getByTestId('audio-dots')).toBeInTheDocument();
     expect(screen.getByTestId('pill-preset-label')).toHaveTextContent('Prompts');
 

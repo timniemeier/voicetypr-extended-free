@@ -1,6 +1,6 @@
 import { act, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ModelsSection } from '../ModelsSection';
+import { STTModelsSection } from '../STTModelsSection';
 import type { AppSettings, ModelInfo } from '@/types';
 
 // ---- Settings context mock ------------------------------------------------
@@ -202,7 +202,7 @@ interface RenderOpts {
 
 const renderModelsSection = ({ currentModel, models }: RenderOpts = {}) => {
   return render(
-    <ModelsSection
+    <STTModelsSection
       models={models ?? [['base', baseModel]]}
       downloadProgress={{}}
       verifyingModels={new Set()}
