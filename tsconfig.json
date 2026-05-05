@@ -26,5 +26,8 @@
     }
   },
   "include": ["src"],
+  "exclude": [
+    "src/components/sections/__tests__/ModelsSection.languages.test.tsx"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

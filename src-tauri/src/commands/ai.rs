@@ -1,5 +1,9 @@
 use crate::ai::openai::{is_unsupported_token_parameter_error, model_uses_max_completion_tokens};
-use crate::ai::prompts::validate_custom_prompts;
+use crate::ai::prompts::{
+    validate_custom_prompts, validate_prompt_fields, BuiltinId, Prompt, PromptKind,
+    PromptLibrary, BUILTIN_DEFAULT_ID, BUILTIN_PROMPT_DEFAULTS, PROMPT_LIBRARY_VERSION,
+};
+#[allow(deprecated)]
 use crate::ai::{
     AIEnhancementRequest, AIProviderConfig, AIProviderFactory, CustomPrompts, EnhancementOptions,
 };
@@ -716,6 +720,7 @@ pub async fn disable_ai_enhancement(app: tauri::AppHandle) -> Result<(), String>
     Ok(())
 }
 
+#[deprecated(note = "use list_prompts/get_active_prompt — removed next release")]
 #[tauri::command]
 pub async fn get_enhancement_options(app: tauri::AppHandle) -> Result<EnhancementOptions, String> {
     let store = app.store("settings").map_err(|e| e.to_string())?;
@@ -729,6 +734,7 @@ pub async fn get_enhancement_options(app: tauri::AppHandle) -> Result<Enhancemen
     }
 }
 
+#[deprecated(note = "use set_active_prompt — removed next release")]
 #[tauri::command]
 pub async fn update_enhancement_options(
     options: EnhancementOptions,
@@ -751,6 +757,7 @@ pub async fn update_enhancement_options(
     Ok(())
 }
 
+#[deprecated(note = "use list_prompts — removed next release")]
 #[tauri::command]
 pub async fn get_custom_prompts(app: tauri::AppHandle) -> Result<CustomPrompts, String> {
     let store = app.store("settings").map_err(|e| e.to_string())?;
@@ -763,6 +770,7 @@ pub async fn get_custom_prompts(app: tauri::AppHandle) -> Result<CustomPrompts, 
     }
 }
 
+#[deprecated(note = "use update_prompt/create_prompt — removed next release")]
 #[tauri::command]
 pub async fn update_custom_prompts(
     prompts: CustomPrompts,
@@ -788,9 +796,205 @@ pub async fn update_custom_prompts(
     Ok(())
 }
 
+#[deprecated(note = "use reset_prompt_to_default — removed next release")]
 #[tauri::command]
 pub async fn get_default_prompts() -> Result<CustomPrompts, String> {
     Ok(CustomPrompts::defaults())
+}
+
+// ============================================================================
+// Prompt library commands (replaces enhancement_options + custom_prompts)
+// ============================================================================
+
+const PROMPTS_KEY: &str = "prompts";
+
+fn load_library(app: &tauri::AppHandle) -> Result<PromptLibrary, String> {
+    let store = app.store("settings").map_err(|e| e.to_string())?;
+    if let Some(value) = store.get(PROMPTS_KEY) {
+        match serde_json::from_value::<PromptLibrary>(value.clone()) {
+            Ok(lib) => Ok(lib),
+            Err(e) => Err(format!("corrupt prompt library: {}", e)),
+        }
+    } else {
+        // Migration should have run; treat absence as fresh defaults rather
+        // than failing.
+        let lib = PromptLibrary::default();
+        save_library(app, &lib)?;
+        Ok(lib)
+    }
+}
+
+fn save_library(app: &tauri::AppHandle, library: &PromptLibrary) -> Result<(), String> {
+    let store = app.store("settings").map_err(|e| e.to_string())?;
+    let value = serde_json::to_value(library)
+        .map_err(|e| format!("failed to serialize prompt library: {}", e))?;
+    store.set(PROMPTS_KEY, value);
+    store
+        .save()
+        .map_err(|e| format!("failed to persist prompt library: {}", e))
+}
+
+fn ensure_active_id_valid(library: &mut PromptLibrary) {
+    let exists = library
+        .prompts
+        .iter()
+        .any(|p| p.id == library.active_prompt_id);
+    if !exists {
+        library.active_prompt_id = BUILTIN_DEFAULT_ID.to_string();
+    }
+}
+
+#[tauri::command]
+pub async fn list_prompts(app: tauri::AppHandle) -> Result<PromptLibrary, String> {
+    load_library(&app)
+}
+
+#[tauri::command]
+pub async fn get_active_prompt(app: tauri::AppHandle) -> Result<Prompt, String> {
+    let mut library = load_library(&app)?;
+    ensure_active_id_valid(&mut library);
+    let active = library
+        .prompts
+        .iter()
+        .find(|p| p.id == library.active_prompt_id)
+        .cloned();
+    match active {
+        Some(p) => Ok(p),
+        None => Err(format!(
+            "active prompt not found in library: {}",
+            library.active_prompt_id
+        )),
+    }
+}
+
+#[tauri::command]
+pub async fn set_active_prompt(app: tauri::AppHandle, id: String) -> Result<String, String> {
+    let mut library = load_library(&app)?;
+    if !library.prompts.iter().any(|p| p.id == id) {
+        return Err(format!("prompt not found: {}", id));
+    }
+    library.active_prompt_id = id.clone();
+    save_library(&app, &library)?;
+    crate::commands::audio::invalidate_recording_config_cache(&app).await;
+    Ok(id)
+}
+
+#[tauri::command]
+pub async fn create_prompt(
+    app: tauri::AppHandle,
+    name: String,
+    icon: String,
+    prompt_text: String,
+) -> Result<Prompt, String> {
+    validate_prompt_fields(&name, &icon, &prompt_text)?;
+    let mut library = load_library(&app)?;
+
+    let id = format!("custom:{}", uuid::Uuid::new_v4());
+    let prompt = Prompt {
+        id: id.clone(),
+        kind: PromptKind::Custom,
+        builtin_id: None,
+        name: name.trim().to_string(),
+        icon,
+        prompt_text,
+    };
+    library.prompts.push(prompt.clone());
+    save_library(&app, &library)?;
+    Ok(prompt)
+}
+
+#[tauri::command]
+pub async fn update_prompt(
+    app: tauri::AppHandle,
+    id: String,
+    name: Option<String>,
+    icon: Option<String>,
+    prompt_text: Option<String>,
+) -> Result<Prompt, String> {
+    let mut library = load_library(&app)?;
+    let pos = library
+        .prompts
+        .iter()
+        .position(|p| p.id == id)
+        .ok_or_else(|| format!("prompt not found: {}", id))?;
+
+    // Resolve next field values (apply patches over current).
+    let current = &library.prompts[pos];
+    let next_name = name.clone().unwrap_or_else(|| current.name.clone());
+    let next_icon = icon.clone().unwrap_or_else(|| current.icon.clone());
+    let next_text = prompt_text
+        .clone()
+        .unwrap_or_else(|| current.prompt_text.clone());
+
+    validate_prompt_fields(&next_name, &next_icon, &next_text)?;
+
+    let prompt = &mut library.prompts[pos];
+    prompt.name = next_name.trim().to_string();
+    prompt.icon = next_icon;
+    prompt.prompt_text = next_text;
+    // id, kind, builtin_id are immutable for built-ins and effectively for custom too.
+
+    let updated = prompt.clone();
+    save_library(&app, &library)?;
+    crate::commands::audio::invalidate_recording_config_cache(&app).await;
+    Ok(updated)
+}
+
+#[tauri::command]
+pub async fn delete_prompt(app: tauri::AppHandle, id: String) -> Result<PromptLibrary, String> {
+    let mut library = load_library(&app)?;
+    let pos = library
+        .prompts
+        .iter()
+        .position(|p| p.id == id)
+        .ok_or_else(|| format!("prompt not found: {}", id))?;
+    if matches!(library.prompts[pos].kind, PromptKind::Builtin) {
+        return Err("cannot delete built-in prompt".to_string());
+    }
+    library.prompts.remove(pos);
+    if library.active_prompt_id == id {
+        library.active_prompt_id = BUILTIN_DEFAULT_ID.to_string();
+    }
+    save_library(&app, &library)?;
+    crate::commands::audio::invalidate_recording_config_cache(&app).await;
+    Ok(library)
+}
+
+#[tauri::command]
+pub async fn reset_prompt_to_default(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<Prompt, String> {
+    let mut library = load_library(&app)?;
+    let pos = library
+        .prompts
+        .iter()
+        .position(|p| p.id == id)
+        .ok_or_else(|| format!("prompt not found: {}", id))?;
+    let prompt = &mut library.prompts[pos];
+    let bid = match prompt.kind {
+        PromptKind::Custom => return Err("cannot reset custom prompt".to_string()),
+        PromptKind::Builtin => prompt
+            .builtin_id
+            .ok_or_else(|| "built-in prompt missing builtin_id".to_string())?,
+    };
+    let default = BUILTIN_PROMPT_DEFAULTS
+        .get(&bid)
+        .ok_or_else(|| "no shipped default for built-in".to_string())?;
+    prompt.name = default.name.to_string();
+    prompt.icon = default.icon.to_string();
+    prompt.prompt_text = default.prompt_text.to_string();
+    let reset = prompt.clone();
+    save_library(&app, &library)?;
+    crate::commands::audio::invalidate_recording_config_cache(&app).await;
+    Ok(reset)
+}
+
+#[allow(dead_code)]
+fn _suppress_unused_constants() {
+    // keep BuiltinId / PROMPT_LIBRARY_VERSION exposed even if no caller in this file uses them yet
+    let _ = BuiltinId::Default;
+    let _ = PROMPT_LIBRARY_VERSION;
 }
 
 #[tauri::command]
@@ -935,11 +1139,23 @@ pub async fn enhance_transcription(text: String, app: tauri::AppHandle) -> Resul
 
     drop(store); // Release lock before async operation
 
-    // Load enhancement options
-    let enhancement_options = get_enhancement_options(app.clone()).await.ok();
-
-    // Load user-supplied custom prompts (None/empty per-field falls back to built-in defaults).
-    let custom_prompts = get_custom_prompts(app.clone()).await.ok();
+    // Resolve the active prompt from the new library. Falls back to the
+    // legacy enhancement_options + custom_prompts surface if the new path
+    // somehow can't load (e.g., corrupt blob) so first-launch transcriptions
+    // never break.
+    let active_prompt = get_active_prompt(app.clone()).await.ok();
+    #[allow(deprecated)]
+    let enhancement_options = if active_prompt.is_some() {
+        None
+    } else {
+        get_enhancement_options(app.clone()).await.ok()
+    };
+    #[allow(deprecated)]
+    let custom_prompts = if active_prompt.is_some() {
+        None
+    } else {
+        get_custom_prompts(app.clone()).await.ok()
+    };
 
     // Get the user's selected language for formatting output
     let language = {
@@ -974,6 +1190,7 @@ pub async fn enhance_transcription(text: String, app: tauri::AppHandle) -> Resul
     let request = AIEnhancementRequest {
         text: text.clone(),
         context: None,
+        active_prompt,
         options: enhancement_options,
         language,
         custom_prompts,

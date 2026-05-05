@@ -173,13 +173,23 @@ impl AIProvider for AnthropicProvider {
     ) -> Result<AIEnhancementResponse, AIError> {
         request.validate()?;
 
-        let prompt = prompts::build_enhancement_prompt(
-            &request.text,
-            request.context.as_deref(),
-            &request.options.unwrap_or_default(),
-            request.language.as_deref(),
-            &request.custom_prompts.unwrap_or_default(),
-        );
+        let prompt = if let Some(active) = request.active_prompt.as_ref() {
+            prompts::build_enhancement_prompt_for_active(
+                &request.text,
+                request.context.as_deref(),
+                active,
+                request.language.as_deref(),
+            )
+        } else {
+            #[allow(deprecated)]
+            prompts::build_enhancement_prompt(
+                &request.text,
+                request.context.as_deref(),
+                &request.options.clone().unwrap_or_default(),
+                request.language.as_deref(),
+                &request.custom_prompts.clone().unwrap_or_default(),
+            )
+        };
 
         let temperature = self
             .options

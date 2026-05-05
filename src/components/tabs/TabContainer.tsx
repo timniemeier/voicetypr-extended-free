@@ -5,6 +5,7 @@ import { EnhancementsTab } from "./EnhancementsTab";
 import { HelpTab } from "./HelpTab";
 import { ModelsTab } from "./ModelsTab";
 import { OverviewTab } from "./OverviewTab";
+import { PromptsTab } from "./PromptsTab";
 import { RecordingsTab } from "./RecordingsTab";
 import { SettingsTab } from "./SettingsTab";
 import { AudioUploadSection } from "../sections/AudioUploadSection";
@@ -83,13 +84,18 @@ export function TabContainer({ activeSection }: TabContainerProps) {
         return <SettingsTab />;
 
       case "models":
+      case "stt-models":
         return <ModelsTab />;
 
       case "advanced":
         return <AdvancedTab />;
 
       case "formatting":
+      case "llm-models":
         return <EnhancementsTab />;
+
+      case "prompts":
+        return <PromptsTab />;
 
       case "help":
         return <HelpTab />;
