@@ -11,10 +11,9 @@ interface PromptRowProps {
 }
 
 export function PromptRow({ prompt, isActive, isSelected, onClick }: PromptRowProps) {
-  const preview = prompt.prompt_text
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 60);
+  const normalized = prompt.prompt_text.replace(/\s+/g, " ").trim();
+  const preview =
+    normalized.length > 20 ? `${normalized.slice(0, 20)}...` : normalized;
 
   return (
     <button
