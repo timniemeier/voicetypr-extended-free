@@ -322,7 +322,7 @@ export function RecordingPill() {
               data-testid="pill-preset-bubble"
             >
               <PresetIcon
-                className="h-3 w-3 shrink-0"
+                className="h-3 w-3 shrink-0 text-white/90"
                 data-testid="pill-preset-icon"
                 aria-hidden="true"
               />
