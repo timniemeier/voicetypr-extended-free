@@ -80,7 +80,7 @@ pub fn derive_library_v1(legacy_options: Option<&Value>, legacy_custom: Option<&
         };
         let prompt_text = override_text
             .map(|s| s.to_string())
-            .unwrap_or_else(|| default.prompt_text.to_string());
+            .unwrap_or_else(|| default.prompt_text());
         prompts.push(Prompt {
             id: id.prompt_id(),
             kind: PromptKind::Builtin,
@@ -134,7 +134,7 @@ mod tests {
         for p in &lib.prompts {
             let bid = p.builtin_id.unwrap();
             let default = BUILTIN_PROMPT_DEFAULTS.get(&bid).unwrap();
-            assert_eq!(p.prompt_text, default.prompt_text);
+            assert_eq!(p.prompt_text, default.prompt_text());
             assert_eq!(p.name, default.name);
             assert_eq!(p.icon, default.icon);
             assert_eq!(p.kind, PromptKind::Builtin);
@@ -151,7 +151,7 @@ mod tests {
         for p in &lib.prompts {
             let bid = p.builtin_id.unwrap();
             let default = BUILTIN_PROMPT_DEFAULTS.get(&bid).unwrap();
-            assert_eq!(p.prompt_text, default.prompt_text);
+            assert_eq!(p.prompt_text, default.prompt_text());
         }
     }
 
@@ -173,7 +173,7 @@ mod tests {
                 continue;
             }
             let default = BUILTIN_PROMPT_DEFAULTS.get(&bid).unwrap();
-            assert_eq!(p.prompt_text, default.prompt_text);
+            assert_eq!(p.prompt_text, default.prompt_text());
         }
     }
 
@@ -186,7 +186,7 @@ mod tests {
         for p in &lib.prompts {
             let bid = p.builtin_id.unwrap();
             let default = BUILTIN_PROMPT_DEFAULTS.get(&bid).unwrap();
-            assert_eq!(p.prompt_text, default.prompt_text);
+            assert_eq!(p.prompt_text, default.prompt_text());
         }
         assert_eq!(lib.prompts.len(), 4);
     }
@@ -223,7 +223,7 @@ mod tests {
         for p in &lib.prompts {
             let bid = p.builtin_id.unwrap();
             let default = BUILTIN_PROMPT_DEFAULTS.get(&bid).unwrap();
-            assert_eq!(p.prompt_text, default.prompt_text);
+            assert_eq!(p.prompt_text, default.prompt_text());
         }
     }
 

@@ -983,7 +983,7 @@ pub async fn reset_prompt_to_default(
         .ok_or_else(|| "no shipped default for built-in".to_string())?;
     prompt.name = default.name.to_string();
     prompt.icon = default.icon.to_string();
-    prompt.prompt_text = default.prompt_text.to_string();
+    prompt.prompt_text = default.prompt_text();
     let reset = prompt.clone();
     save_library(&app, &library)?;
     crate::commands::audio::invalidate_recording_config_cache(&app).await;

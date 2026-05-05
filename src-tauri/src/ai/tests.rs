@@ -535,22 +535,51 @@ mod tests {
     fn test_build_enhancement_prompt_for_active_builtin_email() {
         use crate::ai::prompts::{
             build_enhancement_prompt_for_active, BuiltinId, Prompt, PromptKind,
+            BUILTIN_PROMPT_DEFAULTS,
         };
 
+        // Built-ins ship with the base post-processor template baked into
+        // `prompt_text` (see Issue #8). The resolver no longer prepends the
+        // base — `prompt_text` IS the prompt sent to the AI.
+        let shipped = BUILTIN_PROMPT_DEFAULTS
+            .get(&BuiltinId::Email)
+            .unwrap()
+            .prompt_text();
         let active = Prompt {
             id: "builtin:email".to_string(),
             kind: PromptKind::Builtin,
             builtin_id: Some(BuiltinId::Email),
             name: "Email".to_string(),
             icon: "Mail".to_string(),
-            prompt_text:
-                "Now format the cleaned text as an email: subject; greeting; body.".to_string(),
+            prompt_text: shipped,
         };
         let out = build_enhancement_prompt_for_active("hi mary", None, &active, Some("en"));
         assert!(out.contains("post-processor for voice transcripts"));
         assert!(out.contains("written English"));
         assert!(out.contains("format the cleaned text as an email"));
         assert!(out.contains("hi mary"));
+    }
+
+    #[test]
+    fn test_default_builtin_ships_base_template_no_duplication() {
+        use crate::ai::prompts::{
+            build_enhancement_prompt_for_active, BuiltinId, BUILTIN_PROMPT_DEFAULTS,
+        };
+
+        // Issue #8 regression guard: Default's shipped prompt_text must be
+        // non-empty (passes FR-013a validation) and resolving the prompt must
+        // not duplicate the base post-processor preamble.
+        let default = BUILTIN_PROMPT_DEFAULTS.get(&BuiltinId::Default).unwrap();
+        let shipped = default.prompt_text();
+        assert!(!shipped.trim().is_empty(), "Default must ship non-empty prompt_text");
+
+        let active = default.to_prompt();
+        let out = build_enhancement_prompt_for_active("hello world", None, &active, Some("en"));
+        // Exactly one occurrence of the base preamble in the resolved prompt.
+        let count = out.matches("post-processor for voice transcripts").count();
+        assert_eq!(count, 1, "base preamble must appear exactly once, got {}", count);
+        assert!(out.contains("written English"));
+        assert!(out.contains("hello world"));
     }
 
     #[test]

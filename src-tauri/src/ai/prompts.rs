@@ -146,17 +146,24 @@ pub fn validate_prompt_fields(name: &str, icon: &str, prompt_text: &str) -> Resu
     Ok(())
 }
 
-/// Shipped defaults for one built-in. The `prompt_text` is the full transform
-/// body (no separate base template); `build_enhancement_prompt` still wraps it
-/// in the language-aware base for built-ins.
+/// Shipped defaults for one built-in. `prompt_text` is the FULL prompt that
+/// gets sent to the AI (base post-processor template + any preset-specific
+/// transform), with `{language}` placeholder still in place for late
+/// substitution by `build_enhancement_prompt_for_active`.
 pub struct BuiltinDefault {
     pub builtin_id: BuiltinId,
     pub name: &'static str,
     pub icon: &'static str,
-    pub prompt_text: &'static str,
+    prompt_text_fn: fn() -> String,
 }
 
 impl BuiltinDefault {
+    /// Produce the shipped prompt text. For Default this is just the base
+    /// template; for the other built-ins it is base + "\n\n" + transform.
+    pub fn prompt_text(&self) -> String {
+        (self.prompt_text_fn)()
+    }
+
     pub fn to_prompt(&self) -> Prompt {
         Prompt {
             id: self.builtin_id.prompt_id(),
@@ -164,7 +171,7 @@ impl BuiltinDefault {
             builtin_id: Some(self.builtin_id),
             name: self.name.to_string(),
             icon: self.icon.to_string(),
-            prompt_text: self.prompt_text.to_string(),
+            prompt_text: self.prompt_text(),
         }
     }
 }
@@ -185,35 +192,48 @@ impl BuiltinDefaults {
 
 pub const BUILTIN_PROMPT_DEFAULTS: BuiltinDefaults = BuiltinDefaults;
 
-/// Default built-in: empty transform; base prompt only.
-const DEFAULT_BUILTIN_PROMPT_TEXT: &str = "";
+fn default_builtin_text() -> String {
+    BASE_PROMPT_TEMPLATE.to_string()
+}
+
+fn prompts_builtin_text() -> String {
+    format!("{}\n\n{}", BASE_PROMPT_TEMPLATE, PROMPTS_TRANSFORM)
+}
+
+fn email_builtin_text() -> String {
+    format!("{}\n\n{}", BASE_PROMPT_TEMPLATE, EMAIL_TRANSFORM)
+}
+
+fn commit_builtin_text() -> String {
+    format!("{}\n\n{}", BASE_PROMPT_TEMPLATE, COMMIT_TRANSFORM)
+}
 
 const DEFAULT_BUILTIN: BuiltinDefault = BuiltinDefault {
     builtin_id: BuiltinId::Default,
     name: "Default",
     icon: "FileText",
-    prompt_text: DEFAULT_BUILTIN_PROMPT_TEXT,
+    prompt_text_fn: default_builtin_text,
 };
 
 const PROMPTS_BUILTIN: BuiltinDefault = BuiltinDefault {
     builtin_id: BuiltinId::Prompts,
     name: "Prompts",
     icon: "Sparkles",
-    prompt_text: PROMPTS_TRANSFORM,
+    prompt_text_fn: prompts_builtin_text,
 };
 
 const EMAIL_BUILTIN: BuiltinDefault = BuiltinDefault {
     builtin_id: BuiltinId::Email,
     name: "Email",
     icon: "Mail",
-    prompt_text: EMAIL_TRANSFORM,
+    prompt_text_fn: email_builtin_text,
 };
 
 const COMMIT_BUILTIN: BuiltinDefault = BuiltinDefault {
     builtin_id: BuiltinId::Commit,
     name: "Commit",
     icon: "GitCommit",
-    prompt_text: COMMIT_TRANSFORM,
+    prompt_text_fn: commit_builtin_text,
 };
 
 // Base prompt template with {language} placeholder
@@ -431,35 +451,23 @@ pub fn build_enhancement_prompt(
     assemble_prompt(&base_prompt, mode_transform, text, context)
 }
 
-/// New entry point: takes a fully-resolved active `Prompt`. Built-ins keep the
-/// language-aware base + transform structure (via `builtin_id`); custom prompts
-/// use `prompt_text` directly with optional `{language}` substitution.
+/// New entry point: takes a fully-resolved active `Prompt`. Both built-ins
+/// and custom prompts resolve through the same path: `prompt_text` is THE
+/// prompt that gets sent to the AI, with `{language}` substituted late.
+/// Built-ins ship with the base post-processor template baked in; users see
+/// and edit the same string the model sees.
 pub fn build_enhancement_prompt_for_active(
     text: &str,
     context: Option<&str>,
     active_prompt: &Prompt,
     language: Option<&str>,
 ) -> String {
-    match active_prompt.kind {
-        PromptKind::Builtin => {
-            // For built-ins we always wrap the active prompt's text as the
-            // mode-specific transform on top of the shared base template.
-            // The `prompt_text` is what the user (or shipped default) edited.
-            let base_prompt = apply_language(BASE_PROMPT_TEMPLATE, language);
-            let transform = active_prompt.prompt_text.as_str();
-            assemble_prompt(&base_prompt, transform, text, context)
-        }
-        PromptKind::Custom => {
-            // Custom prompts replace the entire prompt body. Honor the
-            // {language} placeholder if the user used it.
-            let body = apply_language(active_prompt.prompt_text.as_str(), language);
-            let mut prompt = format!("{}\n\nTranscribed text:\n{}", body, text.trim());
-            if let Some(ctx) = context {
-                prompt.push_str(&format!("\n\nContext: {}", ctx));
-            }
-            prompt
-        }
+    let body = apply_language(active_prompt.prompt_text.as_str(), language);
+    let mut prompt = format!("{}\n\nTranscribed text:\n{}", body, text.trim());
+    if let Some(ctx) = context {
+        prompt.push_str(&format!("\n\nContext: {}", ctx));
     }
+    prompt
 }
 
 fn assemble_prompt(base: &str, transform: &str, text: &str, context: Option<&str>) -> String {
