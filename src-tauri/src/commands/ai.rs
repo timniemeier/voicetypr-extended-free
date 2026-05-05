@@ -879,7 +879,7 @@ pub async fn set_active_prompt(app: tauri::AppHandle, id: String) -> Result<Stri
     Ok(id)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn create_prompt(
     app: tauri::AppHandle,
     name: String,
@@ -903,7 +903,7 @@ pub async fn create_prompt(
     Ok(prompt)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn update_prompt(
     app: tauri::AppHandle,
     id: String,
