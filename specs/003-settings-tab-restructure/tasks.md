@@ -130,14 +130,14 @@ description: "Task list for feature 003-settings-tab-restructure"
 
 ### Tests for User Story 3
 
-- [ ] T037 [P] [US3] Extend `src/components/prompts/__tests__/PromptsSection.test.tsx`: clicking "New prompt" opens a fresh editor with empty fields and disabled save (FR-013a — non-empty name + non-empty prompt_text + valid icon required for create); typing valid name/icon/text and pausing → row appears in CUSTOM group; new prompt does NOT auto-activate (FR-013 / Q2)
-- [ ] T038 [P] [US3] Extend `src/components/prompts/__tests__/PromptsSection.test.tsx`: deleting the active custom prompt sets `active_prompt_id` to `builtin:default` (FR-011); deleting a non-active custom prompt leaves the active selection alone
+- [x] T037 [P] [US3] Extend `src/components/prompts/__tests__/PromptsSection.test.tsx`: clicking "New prompt" opens a fresh editor with empty fields and disabled save (FR-013a — non-empty name + non-empty prompt_text + valid icon required for create); typing valid name/icon/text and pausing → row appears in CUSTOM group; new prompt does NOT auto-activate (FR-013 / Q2) _(written during MVP — US1 phase, file `src/components/prompts/__tests__/PromptsSection.test.tsx`)_
+- [x] T038 [P] [US3] Extend `src/components/prompts/__tests__/PromptsSection.test.tsx`: deleting the active custom prompt sets `active_prompt_id` to `builtin:default` (FR-011); deleting a non-active custom prompt leaves the active selection alone _(written during MVP — US1 phase)_
 
 ### Implementation for User Story 3
 
-- [ ] T039 [US3] `src/components/prompts/PromptList.tsx` "New prompt" entry: when clicked, calls a callback to enter create mode (sets `selectedId = null`, switches `PromptEditor` to a draft state); depends on T026
-- [ ] T040 [US3] `src/components/prompts/PromptEditor.tsx` draft mode: when `prompt === null` (create), renders blank Name / Icon / Prompt text fields with placeholders; "Save" affordance is disabled until all three are valid (non-empty name ≤64 chars, valid icon, non-empty prompt_text ≤8192 bytes); on Save → calls `usePromptLibrary.createPrompt({name, icon, prompt_text})` → on success the parent selects the newly created prompt and the editor exits draft mode; depends on T027
-- [ ] T041 [US3] `src/components/sections/PromptsSection.tsx` wiring: when "New prompt" clicked → enter draft mode (T039 + T040); after `createPrompt` resolves → select the new id, library refreshes via the hook; on delete → call `usePromptLibrary.deletePrompt(id)`, after success select `active_prompt_id` (which the backend has fallback-corrected if needed)
+- [x] T039 [US3] `src/components/prompts/PromptList.tsx` "New prompt" entry: when clicked, calls a callback to enter create mode (sets `selectedId = null`, switches `PromptEditor` to a draft state); depends on T026 _(landed in MVP — `onNewPrompt` callback + `data-testid="prompt-new"`)_
+- [x] T040 [US3] `src/components/prompts/PromptEditor.tsx` draft mode: when `prompt === null` (create), renders blank Name / Icon / Prompt text fields with placeholders; "Save" affordance is disabled until all three are valid (non-empty name ≤64 chars, valid icon, non-empty prompt_text ≤8192 bytes); on Save → calls `usePromptLibrary.createPrompt({name, icon, prompt_text})` → on success the parent selects the newly created prompt and the editor exits draft mode; depends on T027 _(landed in MVP — Create button gated by `validate(draft)`)_
+- [x] T041 [US3] `src/components/sections/PromptsSection.tsx` wiring: when "New prompt" clicked → enter draft mode (T039 + T040); after `createPrompt` resolves → select the new id, library refreshes via the hook; on delete → call `usePromptLibrary.deletePrompt(id)`, after success select `active_prompt_id` (which the backend has fallback-corrected if needed) _(landed in MVP)_
 
 **Checkpoint**: Full custom-prompt CRUD lifecycle works end-to-end. SC-005 satisfied (create → edit → set-active → use → delete in one session, no app restart).
 
@@ -145,13 +145,13 @@ description: "Task list for feature 003-settings-tab-restructure"
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T042 [P] Run quickstart.md manual smoke-test pre-conditions and walkthrough; capture any deviations as new tasks (do not fix in-line — surface as follow-ups)
+- [ ] T042 [P] Run quickstart.md manual smoke-test pre-conditions and walkthrough; capture any deviations as new tasks (do not fix in-line — surface as follow-ups) _**DEFERRED — agent cannot exercise `pnpm tauri dev` interactively. Static walkthrough completed: all 7 prompt cmds registered in lib.rs, migration wired to setup hook, sidebar shows three new tabs in canonical order, LLM Models has no preset picker / no Custom Prompts collapsible, STT Models retains language picker + model list, US3 CRUD path complete. User MUST run quickstart.md manually before merge to confirm runtime behavior matches.**_
 - [x] T043 [P] Lint pass: `pnpm lint` clean across changed files; fix any ESLint warnings introduced by new components
 - [x] T044 [P] Type pass: `pnpm typecheck` clean; verify no new `any` introductions (Constitution Principle IV)
 - [x] T045 [P] Frontend test pass: `pnpm test` green at MVP (US1 tests T021/T022/T023 added & passing; US2 T029-T031 + US3 T037/T038 still pending — implementation deferred past MVP stop)
 - [x] T046 [P] Backend test pass: `cd src-tauri && cargo test` green; 268 lib tests pass including new migration suite (T009) and prompt-library coverage (T015/T016); warnings count unchanged from baseline
-- [ ] T047 Update `CLAUDE.md` "Recent Updates" section with a one-line entry: "Settings sidebar restructured: Prompts tab (new), Formatting → LLM Models, Models → STT Models. See `specs/003-settings-tab-restructure/`."
-- [ ] T048 Add CHANGELOG entry under `## Unreleased`: feature summary + list of breaking changes from user perspective (preset-picker location moved to Prompts tab; `custom_prompts.base` field dropped — see release notes); link to follow-ups.md for FU-1 / FU-2
+- [x] T047 Update `CLAUDE.md` "Recent Updates" section with a one-line entry: "Settings sidebar restructured: Prompts tab (new), Formatting → LLM Models, Models → STT Models. See `specs/003-settings-tab-restructure/`."
+- [x] T048 Add CHANGELOG entry under `## Unreleased`: feature summary + list of breaking changes from user perspective (preset-picker location moved to Prompts tab; `custom_prompts.base` field dropped — see release notes); link to follow-ups.md for FU-1 / FU-2
 
 ---
 

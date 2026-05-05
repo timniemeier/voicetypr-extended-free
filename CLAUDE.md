@@ -103,6 +103,7 @@ pnpm typecheck    # Run TypeScript compiler
 - Global hotkey support
 
 📝 **Recent Updates**:
+- Settings sidebar restructured: Prompts tab (new), Formatting → LLM Models, Models → STT Models. See `specs/003-settings-tab-restructure/`.
 - Parakeet Swift integration complete (see `PARAKEET_SWIFT_INTEGRATION.md`)
 - Native Apple Neural Engine support for **macOS only** (see `PARAKEET_MACOS_ONLY_FIX.md`)
 - Automated sidecar build via `build.rs`
@@ -119,3 +120,9 @@ pnpm typecheck    # Run TypeScript compiler
 IMPORTANT: Read `agent-docs` for more details on the project before making any changes.
 IMPORTANT: Read `agent-reports` to understand whats going on
 IMPORTANT: Read `CLAUDE.local.md` for any local changes.
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan:
+`specs/003-settings-tab-restructure/plan.md`
+<!-- SPECKIT END -->
