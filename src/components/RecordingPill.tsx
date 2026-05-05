@@ -6,6 +6,11 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import {
+  iconComponentByName,
+  isIconName,
+  type IconName,
+} from "@/lib/prompts/icon-allowlist";
 
 type PillState = "idle" | "listening" | "transcribing" | "formatting";
 
@@ -18,6 +23,16 @@ const BUILTIN_LABELS: Record<string, string> = {
   "builtin:prompts": "Prompts",
   "builtin:email": "Email",
   "builtin:commit": "Commit",
+};
+
+// Built-in id → shipped icon name (mirrors `BUILTIN_PROMPT_DEFAULTS` in
+// `src-tauri/src/ai/prompts.rs`). Lets the pill render the right icon for
+// the four built-ins without an extra round-trip on every cycle event.
+const BUILTIN_ICONS: Record<string, IconName> = {
+  "builtin:default": "FileText",
+  "builtin:prompts": "Sparkles",
+  "builtin:email": "Mail",
+  "builtin:commit": "GitCommit",
 };
 
 // Duration of the "flash" the overlay does when a cycle event arrives while
@@ -42,6 +57,7 @@ export function RecordingPill() {
   // The active formatting prompt — spec 003 unified built-ins and custom
   // prompts under a single `active_prompt_id` (string) + display `label`.
   const [activePresetLabel, setActivePresetLabel] = useState<string>("Default");
+  const [activePresetIcon, setActivePresetIcon] = useState<IconName>("FileText");
   const [activeLanguage, setActiveLanguage] = useState<string>(settingsLanguage);
   const [forceShow, setForceShow] = useState(false);
   const forceShowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -133,11 +149,15 @@ export function RecordingPill() {
   // display labels; custom prompts use the user-supplied `name` field.
   useEffect(() => {
     let cancelled = false;
-    invoke<{ id: string; name: string }>("get_active_prompt")
+    invoke<{ id: string; name: string; icon: string }>("get_active_prompt")
       .then((prompt) => {
         if (cancelled || !prompt?.id) return;
         const label = BUILTIN_LABELS[prompt.id] ?? prompt.name ?? "Default";
         setActivePresetLabel(label);
+        const icon =
+          BUILTIN_ICONS[prompt.id] ??
+          (isIconName(prompt.icon) ? prompt.icon : "FileText");
+        setActivePresetIcon(icon);
       })
       .catch(() => {
         // Silent: the label simply stays at the current default until a
@@ -177,6 +197,21 @@ export function RecordingPill() {
         if (id) {
           const label = BUILTIN_LABELS[id] ?? event.payload?.label ?? "Default";
           setActivePresetLabel(label);
+          const builtinIcon = BUILTIN_ICONS[id];
+          if (builtinIcon) {
+            setActivePresetIcon(builtinIcon);
+          } else {
+            // Custom prompt — fetch its icon from the prompt library. The
+            // cycle hotkey only steps through built-ins (FU-2 Option B), so
+            // this branch is only hit when the user explicitly activates a
+            // custom prompt from the Prompts tab.
+            invoke<{ icon: string }>("get_active_prompt")
+              .then((prompt) => {
+                if (!isMounted || !prompt?.icon) return;
+                if (isIconName(prompt.icon)) setActivePresetIcon(prompt.icon);
+              })
+              .catch(() => {});
+          }
         }
         flash();
       }),
@@ -279,16 +314,24 @@ export function RecordingPill() {
           </div>
         )}
 
-        {pillShowPreset && (
-          <div
-            className={`${bubbleBase} px-2.5 py-1`}
-            data-testid="pill-preset-bubble"
-          >
-            <span className={labelClass} data-testid="pill-preset-label">
-              {activePresetLabel}
-            </span>
-          </div>
-        )}
+        {pillShowPreset && (() => {
+          const PresetIcon = iconComponentByName[activePresetIcon];
+          return (
+            <div
+              className={`${bubbleBase} px-2.5 py-1 flex items-center gap-1.5`}
+              data-testid="pill-preset-bubble"
+            >
+              <PresetIcon
+                className="h-3 w-3 shrink-0"
+                data-testid="pill-preset-icon"
+                aria-hidden="true"
+              />
+              <span className={labelClass} data-testid="pill-preset-label">
+                {activePresetLabel}
+              </span>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

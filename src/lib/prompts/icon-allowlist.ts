@@ -15,6 +15,11 @@ import {
   Terminal,
   Star,
   Zap,
+  Code,
+  Wand2,
+  Bug,
+  FileCode,
+  Link,
   type LucideIcon,
 } from "lucide-react";
 
@@ -35,6 +40,11 @@ export const ICON_NAMES = [
   "Terminal",
   "Star",
   "Zap",
+  "Code",
+  "Wand2",
+  "Bug",
+  "FileCode",
+  "Link",
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -56,6 +66,11 @@ export const iconComponentByName: Record<IconName, LucideIcon> = {
   Terminal,
   Star,
   Zap,
+  Code,
+  Wand2,
+  Bug,
+  FileCode,
+  Link,
 };
 
 export function isIconName(value: string): value is IconName {

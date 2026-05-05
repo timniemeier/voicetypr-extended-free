@@ -14,7 +14,7 @@ interface IconPickerProps {
 
 export function IconPicker({ value, onChange, disabled = false }: IconPickerProps) {
   return (
-    <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Prompt icon">
+    <div className="grid grid-cols-7 gap-2" role="radiogroup" aria-label="Prompt icon">
       {ICON_NAMES.map((name) => {
         const Icon = iconComponentByName[name];
         const selected = value === name;
