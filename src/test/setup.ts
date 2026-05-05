@@ -111,9 +111,6 @@ const defaultIpcHandler = (cmd: string) => {
     case 'get_ai_settings':
       return { enabled: false, provider: '', model: '', hasApiKey: false };
 
-    case 'get_enhancement_options':
-      return { preset: 'Default', custom_vocabulary: [] };
-
     case 'init_cleanup_schedule':
       return true;
 

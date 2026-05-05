@@ -22,6 +22,10 @@
 - **FU-1 — Legacy store-key cleanup.** The `enhancement_options` and `custom_prompts` keys currently linger in the store post-migration for forensic recovery. Once we have one stable release behind us, drop them in a second pass. Tracked in `specs/003-settings-tab-restructure/follow-ups.md`.
 - **FU-2 — Feature-002 cycler integration.** The hotkey-driven preset cycler (in-flight on a separate branch) needs to read/write `active_prompt_id` directly instead of the legacy enum. Contract pinned: `active_prompt_id == "builtin:" + lowercase(EnhancementPreset)` for built-ins. Tracked in `specs/003-settings-tab-restructure/follow-ups.md`.
 
+### Chores
+
+- chore(ai): remove legacy `enhancement_options` / `custom_prompts` store keys post-migration; delete deprecated cmds (`get_enhancement_options`, `update_enhancement_options`, `get_custom_prompts`, `update_custom_prompts`, `get_default_prompts`). Closes FU-1 from `specs/003-settings-tab-restructure/follow-ups.md`.
+
 ---
 
 ## [1.12.3](https://github.com/moinulmoin/voicetypr/compare/v1.12.2...v1.12.3) (2026-04-29)

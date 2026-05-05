@@ -6,7 +6,9 @@ Items deferred from `/speckit-plan`. Captured here so they survive context clear
 
 ## FU-1 — Delete legacy `enhancement_options` + `custom_prompts` store keys
 
-**Status**: deferred.
+**Status**: DONE — implemented on `chore/fu-1-legacy-cleanup` branch. See `src-tauri/src/migrations/prompt_library_v2_cleanup.rs` and the deletions in `src-tauri/src/commands/ai.rs` + `src-tauri/src/lib.rs`.
+
+**Original status (kept for spec readability)**: deferred.
 **Trigger**: the release **after** the one that ships this feature.
 **Reason for defer**: the migration in `data-model.md` deliberately leaves the two legacy `tauri-plugin-store` keys in place post-migration as a forensic trail, so users hitting bugs can be asked to attach them. After one release of in-the-wild bake time, they're dead weight and worth removing to keep the store JSON readable for future fork rebases against upstream.
 
@@ -28,7 +30,9 @@ Items deferred from `/speckit-plan`. Captured here so they survive context clear
 
 ## FU-2 — Decide feature 002 ↔ feature 003 active-prompt contract when unstashing 002
 
-**Status**: deferred.
+**Status**: DONE — implemented as part of feature 002's merge, see `1e33088f` and 002's spec Clarifications session 2026-05-05.
+
+**Original status (kept for spec readability)**: deferred.
 **Trigger**: when un-stashing the in-flight `002-overlay-preset-language` work (currently `stash@{0}` on the 002 branch). Decide **before** that branch merges, ideally during 002's own merge process — do **not** retrofit this into 003.
 
 **Background**:

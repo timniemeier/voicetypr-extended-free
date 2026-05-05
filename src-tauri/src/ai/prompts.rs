@@ -378,6 +378,10 @@ pub struct CustomPrompts {
 impl CustomPrompts {
     /// Return the built-in defaults populated as `Some(...)` for every field.
     /// Useful for the UI to pre-fill textareas without duplicating strings in TS.
+    ///
+    /// Retained for tests only after FU-1 removed the `get_default_prompts`
+    /// cmd that called it.
+    #[allow(dead_code)]
     pub fn defaults() -> Self {
         Self {
             base: Some(BASE_PROMPT_TEMPLATE.to_string()),
@@ -390,6 +394,11 @@ impl CustomPrompts {
 
 /// Validate that no override exceeds `MAX_CUSTOM_PROMPT_LEN`. Returns the offending
 /// field name in the error so the UI can surface it to the user.
+///
+/// Retained for tests only after FU-1 removed the `update_custom_prompts`
+/// cmd that called it. Can be deleted alongside the legacy `EnhancementOptions`
+/// / `CustomPrompts` structs once provider fallbacks no longer reference them.
+#[allow(dead_code)]
 pub fn validate_custom_prompts(prompts: &CustomPrompts) -> Result<(), String> {
     let fields: [(&str, Option<&String>); 4] = [
         ("base", prompts.base.as_ref()),

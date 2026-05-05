@@ -1,12 +1,9 @@
 use crate::ai::openai::{is_unsupported_token_parameter_error, model_uses_max_completion_tokens};
 use crate::ai::prompts::{
-    validate_custom_prompts, validate_prompt_fields, BuiltinId, Prompt, PromptKind,
-    PromptLibrary, BUILTIN_DEFAULT_ID, BUILTIN_PROMPT_DEFAULTS, PROMPT_LIBRARY_VERSION,
+    validate_prompt_fields, BuiltinId, Prompt, PromptKind, PromptLibrary, BUILTIN_DEFAULT_ID,
+    BUILTIN_PROMPT_DEFAULTS, PROMPT_LIBRARY_VERSION,
 };
-#[allow(deprecated)]
-use crate::ai::{
-    AIEnhancementRequest, AIProviderConfig, AIProviderFactory, CustomPrompts, EnhancementOptions,
-};
+use crate::ai::{AIEnhancementRequest, AIProviderConfig, AIProviderFactory};
 use crate::commands::audio::pill_toast;
 use crate::secure_store;
 use once_cell::sync::Lazy;
@@ -746,90 +743,8 @@ pub async fn disable_ai_enhancement(app: tauri::AppHandle) -> Result<(), String>
     Ok(())
 }
 
-#[deprecated(note = "use list_prompts/get_active_prompt — removed next release")]
-#[tauri::command]
-pub async fn get_enhancement_options(app: tauri::AppHandle) -> Result<EnhancementOptions, String> {
-    let store = app.store("settings").map_err(|e| e.to_string())?;
-
-    // Load from store or return defaults
-    if let Some(options_value) = store.get("enhancement_options") {
-        serde_json::from_value(options_value.clone())
-            .map_err(|e| format!("Failed to parse enhancement options: {}", e))
-    } else {
-        Ok(EnhancementOptions::default())
-    }
-}
-
-#[deprecated(note = "use set_active_prompt — removed next release")]
-#[tauri::command]
-pub async fn update_enhancement_options(
-    options: EnhancementOptions,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    let store = app.store("settings").map_err(|e| e.to_string())?;
-
-    store.set(
-        "enhancement_options",
-        serde_json::to_value(&options)
-            .map_err(|e| format!("Failed to serialize options: {}", e))?,
-    );
-
-    store
-        .save()
-        .map_err(|e| format!("Failed to save enhancement options: {}", e))?;
-
-    log::info!("Enhancement options updated: preset={:?}", options.preset);
-
-    Ok(())
-}
-
-#[deprecated(note = "use list_prompts — removed next release")]
-#[tauri::command]
-pub async fn get_custom_prompts(app: tauri::AppHandle) -> Result<CustomPrompts, String> {
-    let store = app.store("settings").map_err(|e| e.to_string())?;
-
-    if let Some(value) = store.get("custom_prompts") {
-        serde_json::from_value(value.clone())
-            .map_err(|e| format!("Failed to parse custom prompts: {}", e))
-    } else {
-        Ok(CustomPrompts::default())
-    }
-}
-
-#[deprecated(note = "use update_prompt/create_prompt — removed next release")]
-#[tauri::command]
-pub async fn update_custom_prompts(
-    prompts: CustomPrompts,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    // Reject oversize overrides before they hit the store.
-    validate_custom_prompts(&prompts)?;
-
-    let store = app.store("settings").map_err(|e| e.to_string())?;
-
-    store.set(
-        "custom_prompts",
-        serde_json::to_value(&prompts)
-            .map_err(|e| format!("Failed to serialize custom prompts: {}", e))?,
-    );
-
-    store
-        .save()
-        .map_err(|e| format!("Failed to save custom prompts: {}", e))?;
-
-    log::info!("Custom prompts updated");
-
-    Ok(())
-}
-
-#[deprecated(note = "use reset_prompt_to_default — removed next release")]
-#[tauri::command]
-pub async fn get_default_prompts() -> Result<CustomPrompts, String> {
-    Ok(CustomPrompts::defaults())
-}
-
 // ============================================================================
-// Prompt library commands (replaces enhancement_options + custom_prompts)
+// Prompt library commands (replaces legacy enhancement_options + custom_prompts)
 // ============================================================================
 
 const PROMPTS_KEY: &str = "prompts";
@@ -1192,23 +1107,12 @@ pub async fn enhance_transcription(text: String, app: tauri::AppHandle) -> Resul
 
     drop(store); // Release lock before async operation
 
-    // Resolve the active prompt from the new library. Falls back to the
-    // legacy enhancement_options + custom_prompts surface if the new path
-    // somehow can't load (e.g., corrupt blob) so first-launch transcriptions
-    // never break.
+    // Resolve the active prompt from the new library. `get_active_prompt`
+    // internally falls back to a fresh `PromptLibrary::default()` when the
+    // store key is missing, so this should always succeed unless the blob
+    // is corrupt — in which case we still proceed with `None` and the
+    // provider's defensive path produces a sane prompt from shipped defaults.
     let active_prompt = get_active_prompt(app.clone()).await.ok();
-    #[allow(deprecated)]
-    let enhancement_options = if active_prompt.is_some() {
-        None
-    } else {
-        get_enhancement_options(app.clone()).await.ok()
-    };
-    #[allow(deprecated)]
-    let custom_prompts = if active_prompt.is_some() {
-        None
-    } else {
-        get_custom_prompts(app.clone()).await.ok()
-    };
 
     // Get the user's selected language for formatting output
     let language = {
@@ -1219,11 +1123,11 @@ pub async fn enhance_transcription(text: String, app: tauri::AppHandle) -> Resul
     };
 
     log::info!(
-        "Enhancing text with {} model {} (length: {}, options: {:?}, language: {:?})",
+        "Enhancing text with {} model {} (length: {}, active_prompt_id: {:?}, language: {:?})",
         provider,
         model,
         text.len(),
-        enhancement_options,
+        active_prompt.as_ref().map(|p| p.id.as_str()),
         language
     );
 
@@ -1251,9 +1155,9 @@ pub async fn enhance_transcription(text: String, app: tauri::AppHandle) -> Resul
         text: text.clone(),
         context: None,
         active_prompt,
-        options: enhancement_options,
+        options: None,
         language,
-        custom_prompts,
+        custom_prompts: None,
     };
 
     match provider.enhance_text(request).await {
