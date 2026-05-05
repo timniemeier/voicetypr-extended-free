@@ -38,6 +38,13 @@ export const AI_PROVIDERS: AIProviderConfig[] = [
     apiKeyUrl: "https://aistudio.google.com/apikey",
   },
   {
+    id: "ollama",
+    name: "Ollama",
+    color: "text-cyan-600",
+    apiKeyUrl: "https://ollama.com/library",
+    isCustom: true,
+  },
+  {
     id: "custom",
     name: "Custom (OpenAI-compatible)",
     color: "text-purple-600",

@@ -124,5 +124,5 @@ IMPORTANT: Read `CLAUDE.local.md` for any local changes.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/003-settings-tab-restructure/plan.md`
+`specs/002-overlay-preset-language/plan.md`
 <!-- SPECKIT END -->

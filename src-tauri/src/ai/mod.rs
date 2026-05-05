@@ -141,11 +141,27 @@ impl AIProviderFactory {
                 config.model.clone(),
                 config.options.clone(),
             )?)),
+            "ollama" => {
+                let mut options = config.options.clone();
+                options
+                    .entry("base_url".to_string())
+                    .or_insert_with(|| serde_json::Value::String(
+                        "http://localhost:11434/v1".to_string(),
+                    ));
+                options
+                    .entry("no_auth".to_string())
+                    .or_insert(serde_json::Value::Bool(true));
+                Ok(Box::new(openai::OpenAIProvider::new(
+                    config.api_key.clone(),
+                    config.model.clone(),
+                    options,
+                )?))
+            }
             provider => Err(AIError::ProviderNotFound(provider.to_string())),
         }
     }
 
     fn is_valid_provider(provider: &str) -> bool {
-        matches!(provider, "gemini" | "openai" | "anthropic")
+        matches!(provider, "gemini" | "openai" | "anthropic" | "ollama")
     }
 }

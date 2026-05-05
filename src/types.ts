@@ -40,6 +40,7 @@ export const isLocalModel = (model: ModelInfo): model is LocalModelInfo =>
 export type RecordingMode = 'toggle' | 'push_to_talk';
 export type PillIndicatorMode = 'never' | 'always' | 'when_recording';
 export type PillIndicatorPosition = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
+export type PillExtrasLayout = 'right' | 'below';
 
 export interface AppSettings {
   hotkey: string;
@@ -70,6 +71,19 @@ export interface AppSettings {
   pill_indicator_offset?: number;
   // Pause system media during recording
   pause_media_during_recording?: boolean;
+  // Multi-language support: ordered set of enabled ISO 639-1 codes.
+  // The existing `language` field is the active member of this set.
+  enabled_languages?: string[];
+  // Tauri-style global shortcut string for cycling the active formatting preset.
+  cycle_preset_hotkey?: string;
+  // Tauri-style global shortcut string for cycling the active spoken language.
+  cycle_language_hotkey?: string;
+  // Whether to render the active preset name on the recording pill overlay.
+  pill_show_preset?: boolean;
+  // Whether to render the active language ISO code on the recording pill overlay.
+  pill_show_language?: boolean;
+  // Layout for the optional preset/language labels on the pill.
+  pill_extras_layout?: PillExtrasLayout;
 }
 
 export interface TranscriptionHistory {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { Prompt, PromptLibrary } from "@/types/ai";
 
 interface CreatePromptInput extends Record<string, unknown> {
@@ -54,6 +55,35 @@ export function usePromptLibrary(): UsePromptLibraryResult {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Spec 002 — US1 (FU-2 Option B): the global cycle-preset hotkey writes
+  // to the same `prompts` store this hook reads from, then emits
+  // `active-prompt-changed { id, label }`. Mirror the new active id locally
+  // so the Prompts tab stays in sync without a full reload.
+  useEffect(() => {
+    let isMounted = true;
+    let unlistenFn: (() => void) | undefined;
+
+    listen<{ id: string; label?: string }>("active-prompt-changed", (event) => {
+      if (!isMounted) return;
+      const id = event.payload?.id;
+      if (!id) return;
+      setLibrary((prev) =>
+        prev && prev.active_prompt_id !== id ? { ...prev, active_prompt_id: id } : prev
+      );
+    }).then((unlisten) => {
+      if (!isMounted) {
+        unlisten();
+        return;
+      }
+      unlistenFn = unlisten;
+    });
+
+    return () => {
+      isMounted = false;
+      if (unlistenFn) unlistenFn();
+    };
+  }, []);
 
   const applyOptimistic = useCallback((updater: (prev: PromptLibrary) => PromptLibrary) => {
     setLibrary((prev) => (prev ? updater(prev) : prev));

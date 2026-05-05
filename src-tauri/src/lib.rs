@@ -838,6 +838,150 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
+            // Register cycle-preset shortcut if configured (per spec 002).
+            // Failure is non-fatal: we emit `hotkey-registration-failed` so the
+            // frontend can surface a toast, then continue without it.
+            let cycle_preset_hotkey_str = match app.store("settings") {
+                Ok(store) => store
+                    .get("cycle_preset_hotkey")
+                    .and_then(|v| v.as_str().map(|s| s.to_string())),
+                Err(_) => None,
+            };
+
+            if let Some(cycle_preset_key) = cycle_preset_hotkey_str.clone() {
+                if !cycle_preset_key.is_empty() {
+                    log::info!("🔁 Registering cycle-preset hotkey: {}", cycle_preset_key);
+
+                    let normalized_cycle_preset =
+                        crate::commands::key_normalizer::normalize_shortcut_keys(&cycle_preset_key);
+
+                    match normalized_cycle_preset.parse::<tauri_plugin_global_shortcut::Shortcut>() {
+                        Ok(cycle_preset_shortcut) => {
+                            let app_state = app.state::<AppState>();
+                            if let Ok(mut guard) = app_state.cycle_preset_shortcut.lock() {
+                                *guard = Some(cycle_preset_shortcut);
+                            }
+
+                            match app.global_shortcut().register(cycle_preset_shortcut) {
+                                Ok(_) => log::info!(
+                                    "✅ Successfully registered cycle-preset hotkey: {}",
+                                    cycle_preset_key
+                                ),
+                                Err(e) => {
+                                    log::error!(
+                                        "❌ Failed to register cycle-preset hotkey '{}': {}",
+                                        cycle_preset_key,
+                                        e
+                                    );
+                                    if let Ok(mut guard) = app_state.cycle_preset_shortcut.lock() {
+                                        *guard = None;
+                                    }
+                                    if let Some(window) = app.get_webview_window("main") {
+                                        let _ = window.emit(
+                                            "hotkey-registration-failed",
+                                            serde_json::json!({
+                                                "hotkey": cycle_preset_key,
+                                                "kind": "cycle_preset",
+                                                "error": e.to_string(),
+                                            }),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::warn!(
+                                "Invalid cycle-preset hotkey format '{}': {:?}",
+                                cycle_preset_key,
+                                e
+                            );
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.emit(
+                                    "hotkey-registration-failed",
+                                    serde_json::json!({
+                                        "hotkey": cycle_preset_key,
+                                        "kind": "cycle_preset",
+                                        "error": format!("Invalid format: {:?}", e),
+                                    }),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Register cycle-language shortcut if configured (per spec 002 — US2).
+            // Failure is non-fatal: we emit `hotkey-registration-failed` so the
+            // frontend can surface a toast, then continue without it.
+            let cycle_language_hotkey_str = match app.store("settings") {
+                Ok(store) => store
+                    .get("cycle_language_hotkey")
+                    .and_then(|v| v.as_str().map(|s| s.to_string())),
+                Err(_) => None,
+            };
+
+            if let Some(cycle_language_key) = cycle_language_hotkey_str.clone() {
+                if !cycle_language_key.is_empty() {
+                    log::info!("🔁 Registering cycle-language hotkey: {}", cycle_language_key);
+
+                    let normalized_cycle_language =
+                        crate::commands::key_normalizer::normalize_shortcut_keys(&cycle_language_key);
+
+                    match normalized_cycle_language.parse::<tauri_plugin_global_shortcut::Shortcut>() {
+                        Ok(cycle_language_shortcut) => {
+                            let app_state = app.state::<AppState>();
+                            if let Ok(mut guard) = app_state.cycle_language_shortcut.lock() {
+                                *guard = Some(cycle_language_shortcut);
+                            }
+
+                            match app.global_shortcut().register(cycle_language_shortcut) {
+                                Ok(_) => log::info!(
+                                    "✅ Successfully registered cycle-language hotkey: {}",
+                                    cycle_language_key
+                                ),
+                                Err(e) => {
+                                    log::error!(
+                                        "❌ Failed to register cycle-language hotkey '{}': {}",
+                                        cycle_language_key,
+                                        e
+                                    );
+                                    if let Ok(mut guard) = app_state.cycle_language_shortcut.lock() {
+                                        *guard = None;
+                                    }
+                                    if let Some(window) = app.get_webview_window("main") {
+                                        let _ = window.emit(
+                                            "hotkey-registration-failed",
+                                            serde_json::json!({
+                                                "hotkey": cycle_language_key,
+                                                "kind": "cycle_language",
+                                                "error": e.to_string(),
+                                            }),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::warn!(
+                                "Invalid cycle-language hotkey format '{}': {:?}",
+                                cycle_language_key,
+                                e
+                            );
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.emit(
+                                    "hotkey-registration-failed",
+                                    serde_json::json!({
+                                        "hotkey": cycle_language_key,
+                                        "kind": "cycle_language",
+                                        "error": format!("Invalid format: {:?}", e),
+                                    }),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
             // Preload current model if set (graceful degradation)
             // Use Tauri's async runtime which is available after setup
             if let Ok(store) = app.store("settings") {
@@ -894,8 +1038,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         (1440.0, 900.0) // Fallback
                     };
 
-                    let pill_width = 80.0;  // Sized for 3-dot pill (active state with padding)
-                    let pill_height = 40.0;
+                    let pill_width = 280.0;  // Sized to fit dots + language + preset bubbles inline
+                    let pill_height = 120.0;
                     let bottom_offset = 10.0;  // Distance from bottom of screen
 
                     let x = (screen_width - pill_width) / 2.0;
@@ -920,7 +1064,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         .skip_taskbar(true)
                         .transparent(true)
                         .shadow(false)  // Prevent window shadow on macOS
-                        .inner_size(80.0, 40.0)  // Sized for 3-dot pill (active state with padding)
+                        .inner_size(280.0, 120.0)  // Sized to fit dots + language + preset bubbles inline
                         .position(pos_x, pos_y)
                         .visible(true)  // Always visible (controlled by show_pill_indicator setting)
                         .focused(false);  // Don't steal focus
@@ -951,7 +1095,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 // Create toast window for feedback messages (positioned above pill) - all platforms
                 let toast_width = 400.0;
                 let toast_height = 80.0;
-                let pill_width = 80.0;
+                let pill_width = 280.0;
                 let gap = 8.0; // Gap between pill and toast
 
                 // Center toast above pill

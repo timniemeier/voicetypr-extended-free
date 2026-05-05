@@ -131,6 +131,91 @@ mod tests {
     }
 
     #[test]
+    fn test_factory_dispatches_ollama_to_openai_provider() {
+        let config = AIProviderConfig {
+            provider: "ollama".to_string(),
+            model: "llama3.2:3b".to_string(),
+            api_key: String::new(),
+            enabled: true,
+            options: HashMap::new(),
+        };
+
+        let result = AIProviderFactory::create(&config);
+        assert!(result.is_ok(), "expected ok for ollama factory dispatch");
+    }
+
+    #[test]
+    fn test_factory_ollama_default_no_auth_when_options_empty() {
+        let config = AIProviderConfig {
+            provider: "ollama".to_string(),
+            model: "llama3.2:3b".to_string(),
+            api_key: String::new(),
+            enabled: true,
+            options: HashMap::new(),
+        };
+
+        let result = AIProviderFactory::create(&config);
+        assert!(
+            result.is_ok(),
+            "ollama arm must inject no_auth=true so empty api_key is accepted"
+        );
+    }
+
+    #[test]
+    fn test_factory_ollama_routes_to_supplied_url() {
+        // US2 (T026, lighter variant per spec): the original async variant of this
+        // test triggered reqwest's macOS system-configuration init, which panics in
+        // the cargo-test sandbox on this platform (same env failure as
+        // license::api_client::test_api_client_creation). The spec explicitly
+        // allows substituting a lighter test that confirms construction with a
+        // user-supplied URL succeeds — actual failure-path verification is covered
+        // by the manual quickstart "server unreachable" walkthrough (T030).
+        let mut options: HashMap<String, serde_json::Value> = HashMap::new();
+        options.insert(
+            "base_url".to_string(),
+            serde_json::Value::String("http://127.0.0.1:1/v1".to_string()),
+        );
+
+        let config = AIProviderConfig {
+            provider: "ollama".to_string(),
+            model: "llama3.2:3b".to_string(),
+            api_key: String::new(),
+            enabled: true,
+            options,
+        };
+
+        let result = AIProviderFactory::create(&config);
+        assert!(
+            result.is_ok(),
+            "factory must accept a caller-supplied loopback URL"
+        );
+    }
+
+    #[test]
+    fn test_factory_ollama_respects_options_override() {
+        let mut options: HashMap<String, serde_json::Value> = HashMap::new();
+        options.insert(
+            "base_url".to_string(),
+            serde_json::Value::String("http://gpu-server:11434/v1".to_string()),
+        );
+        options.insert("no_auth".to_string(), serde_json::Value::Bool(false));
+
+        let config = AIProviderConfig {
+            provider: "ollama".to_string(),
+            model: "llama3.2:3b".to_string(),
+            api_key: "sk-proxy-bearer-token".to_string(),
+            enabled: true,
+            options,
+        };
+
+        let result = AIProviderFactory::create(&config);
+        assert!(
+            result.is_ok(),
+            "ollama arm must honor caller-provided base_url and no_auth overrides"
+        );
+    }
+
+    #[test]
     fn test_ai_provider_factory_rejects_unknown_anthropic_model() {
         let config = AIProviderConfig {
             provider: "anthropic".to_string(),
@@ -599,6 +684,35 @@ mod tests {
         assert!(!out.contains("post-processor for voice transcripts"));
         assert!(out.contains("Rewrite in Spanish as a casual Slack reply."));
         assert!(out.contains("ack"));
+    }
+
+    #[test]
+    fn test_build_enhancement_prompt_for_active_injects_language_directive() {
+        use crate::ai::prompts::{build_enhancement_prompt_for_active, Prompt, PromptKind};
+
+        // Custom prompt without any language placeholder — directive must
+        // still surface so the model knows the recording's language and
+        // is told to respond in it.
+        let active = Prompt {
+            id: "custom:lang-test".to_string(),
+            kind: PromptKind::Custom,
+            builtin_id: None,
+            name: "Plain rewrite".to_string(),
+            icon: "Pencil".to_string(),
+            prompt_text: "Rewrite the transcript verbatim.".to_string(),
+        };
+        let spanish = build_enhancement_prompt_for_active("hola", None, &active, Some("es"));
+        assert!(
+            spanish.contains("The recording is in Spanish. Respond in Spanish."),
+            "missing language directive in: {spanish}"
+        );
+
+        // Fallback when language is None — defaults to English.
+        let unknown = build_enhancement_prompt_for_active("hi", None, &active, None);
+        assert!(
+            unknown.contains("The recording is in English. Respond in English."),
+            "missing English fallback directive in: {unknown}"
+        );
     }
 
     #[test]

@@ -47,6 +47,21 @@ pub struct Settings {
     pub pause_media_during_recording: bool,
     // Automatically paste transcription text into the active window
     pub auto_paste_transcription: bool,
+    // Ordered set of enabled spoken-language ISO 639-1 codes.
+    // The existing `language` field is the *active* member of this set.
+    pub enabled_languages: Vec<String>,
+    // Tauri-style global shortcut string for cycling the active formatting preset.
+    // `None` means unbound.
+    pub cycle_preset_hotkey: Option<String>,
+    // Tauri-style global shortcut string for cycling the active spoken language.
+    // `None` means unbound.
+    pub cycle_language_hotkey: Option<String>,
+    // Whether to render the active preset name on the recording pill overlay.
+    pub pill_show_preset: bool,
+    // Whether to render the active language ISO code on the recording pill overlay.
+    pub pill_show_language: bool,
+    // Layout for the optional preset/language labels on the pill: "right" or "below".
+    pub pill_extras_layout: String,
 }
 
 impl Default for Settings {
@@ -75,6 +90,12 @@ impl Default for Settings {
             pill_indicator_offset: DEFAULT_INDICATOR_OFFSET,
             pause_media_during_recording: !cfg!(target_os = "macos"),
             auto_paste_transcription: true, // Default to auto-pasting transcription
+            enabled_languages: vec!["en".to_string()],
+            cycle_preset_hotkey: None,
+            cycle_language_hotkey: None,
+            pill_show_preset: false,
+            pill_show_language: false,
+            pill_extras_layout: "right".to_string(),
         }
     }
 }
@@ -121,6 +142,25 @@ pub async fn validate_microphone_selection(app: AppHandle) -> Result<bool, Strin
     set_audio_device(app.clone(), None).await?;
 
     Ok(true)
+}
+
+/// Pure validation/normalisation for the multi-language and overlay-extras
+/// fields. Used by `save_settings` and exercised directly by unit tests.
+///
+/// Rules (per `data-model.md` § "Validation rules"):
+///   - if `enabled_languages` is empty, reset to `["en"]`
+///   - if `language` is not in `enabled_languages`, reset to `enabled_languages[0]`
+///   - if `pill_extras_layout` is neither `"right"` nor `"below"`, coerce to `"right"`
+pub(crate) fn normalize_overlay_and_languages(settings: &mut Settings) {
+    if settings.enabled_languages.is_empty() {
+        settings.enabled_languages = vec!["en".to_string()];
+    }
+    if !settings.enabled_languages.contains(&settings.language) {
+        settings.language = settings.enabled_languages[0].clone();
+    }
+    if settings.pill_extras_layout != "right" && settings.pill_extras_layout != "below" {
+        settings.pill_extras_layout = "right".to_string();
+    }
 }
 
 pub(crate) fn resolve_pill_indicator_mode(
@@ -250,7 +290,53 @@ pub async fn get_settings(app: AppHandle) -> Result<Settings, String> {
             .get("auto_paste_transcription")
             .and_then(|v| v.as_bool())
             .unwrap_or_else(|| Settings::default().auto_paste_transcription),
+        // Migration: if a user upgrades and has the existing `language` set but no
+        // `enabled_languages` key, seed `enabled_languages` to `[<existing language>]`
+        // so a single-language user does not silently land on English.
+        enabled_languages: {
+            let stored = store
+                .get("enabled_languages")
+                .and_then(|v| v.as_array().cloned());
+            match stored {
+                Some(arr) => arr
+                    .into_iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<String>>(),
+                None => {
+                    let existing_language = store
+                        .get("language")
+                        .and_then(|v| v.as_str().map(|s| s.to_string()));
+                    match existing_language {
+                        Some(lang) if !lang.is_empty() => vec![lang],
+                        _ => Settings::default().enabled_languages,
+                    }
+                }
+            }
+        },
+        cycle_preset_hotkey: store
+            .get("cycle_preset_hotkey")
+            .and_then(|v| v.as_str().map(|s| s.to_string())),
+        cycle_language_hotkey: store
+            .get("cycle_language_hotkey")
+            .and_then(|v| v.as_str().map(|s| s.to_string())),
+        pill_show_preset: store
+            .get("pill_show_preset")
+            .and_then(|v| v.as_bool())
+            .unwrap_or_else(|| Settings::default().pill_show_preset),
+        pill_show_language: store
+            .get("pill_show_language")
+            .and_then(|v| v.as_bool())
+            .unwrap_or_else(|| Settings::default().pill_show_language),
+        pill_extras_layout: store
+            .get("pill_extras_layout")
+            .and_then(|v| v.as_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| Settings::default().pill_extras_layout),
     };
+
+    // Defensive normalisation so callers always see a consistent shape, even
+    // before the next write through `save_settings`.
+    let mut settings = settings;
+    normalize_overlay_and_languages(&mut settings);
 
     Ok(settings)
 }
@@ -258,6 +344,34 @@ pub async fn get_settings(app: AppHandle) -> Result<Settings, String> {
 #[tauri::command]
 pub async fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
     let store = app.store("settings").map_err(|e| e.to_string())?;
+
+    // Normalise the multi-language fields and overlay layout before persisting.
+    let mut settings = settings;
+    let pre_languages = settings.enabled_languages.clone();
+    let pre_language = settings.language.clone();
+    let pre_layout = settings.pill_extras_layout.clone();
+    normalize_overlay_and_languages(&mut settings);
+    if settings.enabled_languages != pre_languages {
+        log::info!(
+            "save_settings: enabled_languages normalised from {:?} to {:?}",
+            pre_languages,
+            settings.enabled_languages
+        );
+    }
+    if settings.language != pre_language {
+        log::info!(
+            "save_settings: language '{}' not in enabled_languages; reset to '{}'",
+            pre_language,
+            settings.language
+        );
+    }
+    if settings.pill_extras_layout != pre_layout {
+        log::info!(
+            "save_settings: invalid pill_extras_layout '{}'; coerced to '{}'",
+            pre_layout,
+            settings.pill_extras_layout
+        );
+    }
 
     // Check if model, recording mode, onboarding, and pill indicator mode changed
     let old_model = store
@@ -349,6 +463,17 @@ pub async fn save_settings(app: AppHandle, settings: Settings) -> Result<(), Str
         json!(settings.auto_paste_transcription),
     );
 
+    // Persist the new multi-language and overlay extras fields.
+    store.set("enabled_languages", json!(settings.enabled_languages));
+    store.set("cycle_preset_hotkey", json!(settings.cycle_preset_hotkey));
+    store.set(
+        "cycle_language_hotkey",
+        json!(settings.cycle_language_hotkey),
+    );
+    store.set("pill_show_preset", json!(settings.pill_show_preset));
+    store.set("pill_show_language", json!(settings.pill_show_language));
+    store.set("pill_extras_layout", json!(settings.pill_extras_layout));
+
     // Save pill position if provided
     if let Some((x, y)) = settings.pill_position {
         store.set("pill_position", json!([x, y]));
@@ -366,6 +491,131 @@ pub async fn save_settings(app: AppHandle, settings: Settings) -> Result<(), Str
     if let Ok(mut mode_guard) = app_state.recording_mode.lock() {
         *mode_guard = recording_mode;
         log::info!("Recording mode updated to: {:?}", recording_mode);
+    }
+
+    // Re-register the cycle-preset shortcut if its binding changed.
+    // The previous shortcut (if any) is unregistered, then the new one (if any)
+    // is parsed and registered. Failures are non-fatal: we emit
+    // `hotkey-registration-failed` and clear the slot so the cycle becomes a no-op.
+    {
+        let new_cycle_preset = settings.cycle_preset_hotkey.clone();
+        let shortcuts = app.global_shortcut();
+
+        // Unregister whatever is currently held in AppState.
+        let old_cycle_preset = app_state
+            .cycle_preset_shortcut
+            .lock()
+            .ok()
+            .and_then(|guard| *guard);
+        if let Some(old) = old_cycle_preset {
+            if let Err(e) = shortcuts.unregister(old) {
+                log::warn!("Failed to unregister old cycle-preset shortcut: {}", e);
+            }
+        }
+        if let Ok(mut guard) = app_state.cycle_preset_shortcut.lock() {
+            *guard = None;
+        }
+
+        if let Some(key) = new_cycle_preset.filter(|s| !s.is_empty()) {
+            let normalized = normalize_shortcut_keys(&key);
+            match normalized.parse::<Shortcut>() {
+                Ok(parsed) => match shortcuts.register(parsed) {
+                    Ok(_) => {
+                        if let Ok(mut guard) = app_state.cycle_preset_shortcut.lock() {
+                            *guard = Some(parsed);
+                        }
+                        log::info!("Cycle-preset shortcut registered: {}", key);
+                    }
+                    Err(e) => {
+                        log::error!(
+                            "Failed to register cycle-preset shortcut '{}': {}",
+                            key,
+                            e
+                        );
+                        let _ = app.emit(
+                            "hotkey-registration-failed",
+                            json!({
+                                "hotkey": key,
+                                "kind": "cycle_preset",
+                                "error": e.to_string(),
+                            }),
+                        );
+                    }
+                },
+                Err(e) => {
+                    log::warn!("Invalid cycle-preset shortcut '{}': {:?}", key, e);
+                    let _ = app.emit(
+                        "hotkey-registration-failed",
+                        json!({
+                            "hotkey": key,
+                            "kind": "cycle_preset",
+                            "error": format!("Invalid format: {:?}", e),
+                        }),
+                    );
+                }
+            }
+        }
+    }
+
+    // Re-register the cycle-language shortcut if its binding changed (spec 002 — US2).
+    // Mirrors the cycle-preset block above.
+    {
+        let new_cycle_language = settings.cycle_language_hotkey.clone();
+        let shortcuts = app.global_shortcut();
+
+        let old_cycle_language = app_state
+            .cycle_language_shortcut
+            .lock()
+            .ok()
+            .and_then(|guard| *guard);
+        if let Some(old) = old_cycle_language {
+            if let Err(e) = shortcuts.unregister(old) {
+                log::warn!("Failed to unregister old cycle-language shortcut: {}", e);
+            }
+        }
+        if let Ok(mut guard) = app_state.cycle_language_shortcut.lock() {
+            *guard = None;
+        }
+
+        if let Some(key) = new_cycle_language.filter(|s| !s.is_empty()) {
+            let normalized = normalize_shortcut_keys(&key);
+            match normalized.parse::<Shortcut>() {
+                Ok(parsed) => match shortcuts.register(parsed) {
+                    Ok(_) => {
+                        if let Ok(mut guard) = app_state.cycle_language_shortcut.lock() {
+                            *guard = Some(parsed);
+                        }
+                        log::info!("Cycle-language shortcut registered: {}", key);
+                    }
+                    Err(e) => {
+                        log::error!(
+                            "Failed to register cycle-language shortcut '{}': {}",
+                            key,
+                            e
+                        );
+                        let _ = app.emit(
+                            "hotkey-registration-failed",
+                            json!({
+                                "hotkey": key,
+                                "kind": "cycle_language",
+                                "error": e.to_string(),
+                            }),
+                        );
+                    }
+                },
+                Err(e) => {
+                    log::warn!("Invalid cycle-language shortcut '{}': {:?}", key, e);
+                    let _ = app.emit(
+                        "hotkey-registration-failed",
+                        json!({
+                            "hotkey": key,
+                            "kind": "cycle_language",
+                            "error": format!("Invalid format: {:?}", e),
+                        }),
+                    );
+                }
+            }
+        }
     }
 
     // Handle PTT shortcut registration if needed

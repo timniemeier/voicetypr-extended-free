@@ -150,3 +150,29 @@ export function formatConflictMessage(conflict: ConflictInfo): string {
     return `ℹ️ This hotkey may conflict: ${conflict.description}`;
   }
 }
+
+/**
+ * Check whether a candidate hotkey collides with another hotkey the user has
+ * already bound elsewhere in the app (recording, PTT, cycle-preset,
+ * cycle-language). The comparison is case-insensitive and ignores
+ * `null`/`undefined` slots.
+ *
+ * @param candidate The hotkey the user is trying to bind, in normalized
+ *                  Tauri-string form (e.g. `"CommandOrControl+Shift+P"`).
+ * @param others    Map from a human-readable label to the other hotkey
+ *                  currently bound to that role (e.g.
+ *                  `{ "Recording hotkey": settings.hotkey }`).
+ * @returns The label of the colliding role, or `null` if no collision.
+ */
+export function findUserHotkeyConflict(
+  candidate: string,
+  others: Record<string, string | undefined | null>
+): string | null {
+  if (!candidate) return null;
+  const lower = candidate.toLowerCase();
+  for (const [label, value] of Object.entries(others)) {
+    if (!value) continue;
+    if (value.toLowerCase() === lower) return label;
+  }
+  return null;
+}
