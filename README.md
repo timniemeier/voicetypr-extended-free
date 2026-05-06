@@ -1,6 +1,6 @@
 <div align="center">
   <img src="docs/voicetypr-extended-banner.png" alt="VoiceTypr Extended — disco cat at the mic" width="600">
-
+  <br><br>
   <img src="src-tauri/icons/icon.png" alt="VoiceTypr Logo" width="128" height="128">
 
   # VoiceTypr — Personal Fork
